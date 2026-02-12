@@ -94,7 +94,7 @@ The Raspberry Pi 4B requires a regulated 5V supply. A buck (step-down) switching
 | Item | Supplier | Part Number | Price | Notes |
 |------|----------|-------------|-------|-------|
 | Pololu D24V22F5 | Pololu | 2858 | $7.95 | Direct from pololu.com |
-| Pololu D24V22F5 | DigiKey | 2183-D24V22F5-ND | ~$8.95 | DigiKey stocked |
+| Pololu D24V22F5 | DigiKey | 2183-2858-ND | ~$8.95 | DigiKey stocked |
 | Header pins (0.1" pitch) | Included | — | — | Comes with 5-pin header (unsoldered) |
 
 **Backup option (if unavailable):**

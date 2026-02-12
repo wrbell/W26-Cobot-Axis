@@ -26,8 +26,8 @@ Before ordering, verify:
 |---|------|-------------|-----|----------|-------------|----------------|-----------|-------|
 | 1 | Raspberry Pi 4 Model B | 2GB RAM, Klipper host + RTDE bridge | 1 | Newark | 913-2664 (2GB) | $35.00 | $35.00 | Check lab inventory first; 4GB model also acceptable (914-2774, $55) |
 | 2 | MicroSD Card | 32GB, Class 10 / A1, for Pi OS + Klipper | 1 | DigiKey | 1597-AF3120-ND (Adafruit) | $9.95 | $9.95 | Any reputable 32GB+ Class 10 card works |
-| 3 | Pololu D24V22F5 | 24V-to-5V buck converter, 2.2A, fixed output | 1 | DigiKey | 2183-D24V22F5-ND | $8.95 | $8.95 | Powers Pi via GPIO header |
-| 4 | Gigabit Ethernet Switch | Unmanaged, 5-port, desktop | 1 | Newark | TBD (Netgear GS305) | $19.99 | $19.99 | Check lab inventory; any unmanaged gigabit switch works |
+| 3 | Pololu D24V22F5 | 24V-to-5V buck converter, 2.2A, fixed output | 1 | DigiKey | 2183-2858-ND (Pololu 2858) | $8.95 | $8.95 | Powers Pi via GPIO header |
+| 4 | Gigabit Ethernet Switch | Unmanaged, 5-port, desktop | 1 | Newark | 15P9155 (Netgear GS105NA) | $59.26 | $59.26 | Check lab inventory first; any 5-port unmanaged gigabit switch works |
 | 5 | Ethernet Cable (Cat5e) | 1m, RJ45 both ends | 2 | DigiKey | AE10189-ND | $3.50 | $7.00 | UR30→switch, Pi→switch |
 | 6 | Ethernet Cable (Cat5e) | 2m, RJ45 both ends | 1 | DigiKey | AE10190-ND | $4.50 | $4.50 | Pi400→switch (optional) |
 | 7 | USB-A to USB-C Cable | 0.5m, shielded, USB 2.0 | 1 | DigiKey | 2944-QUSC2HC050-ND | $5.95 | $5.95 | Pi USB-A → SKR Pico USB-C |
@@ -38,10 +38,10 @@ Before ordering, verify:
 |---|------|-------------|-----|----------|-------------|----------------|-----------|-------|
 | 8 | Blade Fuse Holder | Inline ATC/ATO fuse holder, 18 AWG leads | 1 | DigiKey | F4275-ND (Littelfuse) | $3.50 | $3.50 | For 24V main input |
 | 9 | Blade Fuse | 3A, ATC/ATO, standard size | 2 | DigiKey | F990-ND (Littelfuse) | $0.50 | $1.00 | 1 active + 1 spare |
-| 10 | TVS Diode | SMBJ24CA, bidirectional, 24V, SMB package | 1 | DigiKey | SMBJ24CAFSCT-ND | $0.65 | $0.65 | Transient/ESD protection at 24V input |
+| 10 | TVS Diode | SMBJ24CA, bidirectional, 24V, SMB package | 1 | DigiKey | SMBJ24CAFSCT-ND (Littelfuse) | $0.19 | $0.19 | Transient/ESD protection at 24V input |
 | 11 | Electrolytic Capacitor | 100µF, 35V, radial | 1 | DigiKey | P5148-ND (Panasonic) | $0.35 | $0.35 | 24V bus smoothing |
 | 12 | Resettable Fuse (PTC) | 2A hold, 4A trip, radial | 1 | DigiKey | RGE200-ND (Bourns) | $0.75 | $0.75 | Pi 5V rail protection |
-| 13 | Ceramic Capacitor (100nF) | 0.1µF, 50V, radial or SMD | 2 | DigiKey | BC1084CT-ND | $0.20 | $0.40 | Buck converter input/output decoupling |
+| 13 | Ceramic Capacitor (100nF) | 0.1µF, 50V, X7R, radial | 2 | DigiKey | BC1084CT-ND (Vishay K104K15X7RF5TL2) | $0.20 | $0.40 | Buck converter input/output decoupling |
 
 ### 2.3 Wiring and Connectors
 
@@ -79,12 +79,12 @@ Before ordering, verify:
 
 | Category | Est. Total |
 |----------|-----------|
-| Electronics (items 1–7) | $91.34 |
-| Protection and passives (items 8–13) | $6.65 |
+| Electronics (items 1–7) | $130.61 |
+| Protection and passives (items 8–13) | $6.19 |
 | Wiring and connectors (items 14–20) | $30.45 |
 | On hand / provided (items 21–25) | $0.00 |
 | 3D-printed (items 26–28) | $0.00 (material provided) |
-| **Grand Total** | **~$128.44** |
+| **Grand Total** | **~$167** |
 
 **Notes:**
 - Prices are estimates from DigiKey/Newark as of Feb 2026
@@ -95,15 +95,16 @@ Before ordering, verify:
 
 ---
 
-## 4. Part Number Verification Needed
+## 4. Part Number Verification Status
 
-The following part numbers should be verified on DigiKey/Newark before submitting the purchase request:
-
-| Item | Status | Action Needed |
-|------|--------|---------------|
-| Raspberry Pi 4B | Part number varies by stock | Check Newark/DigiKey availability |
-| Gigabit switch | Generic — multiple options | Pick what's in stock; any 5-port unmanaged |
-| Ethernet cables | Generic — many options | Verify length and Cat5e availability |
+| Item | Status | Notes |
+|------|--------|-------|
+| Pololu D24V22F5 | **Verified** — DigiKey 2183-2858-ND | In stock, ships same day |
+| SMBJ24CA TVS | **Verified** — DigiKey SMBJ24CAFSCT-ND | In stock, ~$0.19 |
+| 100nF ceramic cap | **Verified** — DigiKey BC1084CT-ND (Vishay K104K15X7RF5TL2) | In stock |
+| Netgear GS105NA switch | **Verified** — Newark 15P9155 | $59.26; may be out of stock — check lab inventory first |
+| Raspberry Pi 4B | Newark 913-2664 (2GB) | Check availability; also check lab inventory |
+| Ethernet cables | Generic — many options | Verify length and Cat5e availability on DigiKey |
 | Wire (18/22 AWG) | Sold in 100ft spools at DigiKey | May need to buy spools or find shorter lengths |
 | Screw terminals | Many pitch/position options | Verify 5.08mm pitch fits SKR Pico and enclosure |
 

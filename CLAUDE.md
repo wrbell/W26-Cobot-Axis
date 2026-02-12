@@ -38,10 +38,13 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 ## Repository Structure
 
 - `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
+- `src/bridge/tests/` — pytest suite (147 tests across 3 files)
 - `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
 - `src/urscript/` — URScript programs for UR30 teach pendant
 - `trades/` — Trade studies (comms protocol, MCU platform, Klipper vs Lingua Franca)
 - `docs/` — Engineering analysis and technical reference (latency, register allocation, hardware specs)
+- `docs/design/` — Software design documents (13 docs: stepper driving, bridge enhancements, integration plan, etc.)
+- `docs/phase2/` — Phase 2 memo rough drafts (7 docs: block diagram, circuit schematic, pin table, power budget, buck converter, BOM, memo text)
 - `reqs/` — Course requirements, scope, process docs
 - `schedule.md` — Accelerated project schedule (target completion Mar 31, official submission Apr 24)
 - `todo.md` — Master task tracker
@@ -87,10 +90,26 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | Problem analysis (Bolton Step 2) | `docs/problem_analysis.md` |
 | RTDE register allocation | `docs/register_allocation.md` |
 | Latency analysis | `docs/latency_analysis.md` |
+| Design specification (25 requirements) | `docs/design_specification.md` |
+| Stepper driving design (consolidated) | `docs/design/stepper_driving.md` |
 | Trade: Klipper vs Lingua Franca | `trades/lingua_franca_vs_klipper.md` |
 | Trade: Communication protocol | `trades/comms.md` |
 | Trade: MCU platform | `trades/mcu.md` |
 | Information needs tracker | `reqs/information_needs.md` |
+
+## Phase 2 Memo Drafts
+
+Rough drafts in `docs/phase2/` — content ready to paste into Word and redraw in draw.io/KiCad.
+
+| Topic | Location |
+|-------|----------|
+| Full memo text (~1,400 words) + tables | `docs/phase2/memo_draft.md` |
+| System block diagram | `docs/phase2/block_diagram.md` |
+| Circuit schematic (power + signals) | `docs/phase2/circuit_schematic.md` |
+| Pin assignment table (all devices) | `docs/phase2/pin_assignments.md` |
+| Power budget worksheet | `docs/phase2/power_budget.md` |
+| Buck converter selection | `docs/phase2/buck_converter.md` |
+| Bill of materials (~$128, 28 items) | `docs/phase2/bom.md` |
 
 ## Reference Documents
 
