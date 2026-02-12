@@ -14,7 +14,6 @@ Reference: docs/design/bridge_enhancements.md, Section 1.
 
 import logging
 import threading
-import time
 
 from . import config
 from .klipper_client import KlipperClient

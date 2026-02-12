@@ -23,7 +23,6 @@ Reference: docs/register_allocation.md for register mapping.
 import argparse
 import logging
 import signal
-import sys
 import time
 
 from . import config
@@ -32,7 +31,7 @@ from .klipper_client import KlipperClient
 from .watchdog import Watchdog
 from .klipper_status import KlipperStatusPoller
 from .data_logger import DataLogger
-from .extrusion_profile import load_active_profile, LinearProfile
+from .extrusion_profile import load_active_profile
 from .dashboard_client import DashboardClient, DashboardPoller
 
 log = logging.getLogger("bridge")

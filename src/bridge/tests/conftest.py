@@ -10,7 +10,6 @@ Provides:
 
 import json
 import socket
-import threading
 
 import pytest
 from unittest.mock import MagicMock

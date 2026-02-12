@@ -11,10 +11,9 @@ All external I/O (RTDEClient, KlipperClient, time) is mocked.
 import time as real_time
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from bridge import config
-from bridge.bridge_daemon import Bridge, BridgeState
 
 
 # ===================================================================

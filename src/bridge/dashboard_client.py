@@ -15,7 +15,6 @@ Reference: docs/design/bridge_enhancements.md, Section 6.
 import logging
 import socket
 import threading
-import time
 
 from . import config
 
