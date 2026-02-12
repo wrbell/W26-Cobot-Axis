@@ -8,7 +8,7 @@ Usage:
     python -m bridge.bridge_daemon
     python -m bridge.bridge_daemon --host 192.168.1.100 --dry-run
 
-Reference: reqs/register_allocation.md for register mapping.
+Reference: docs/register_allocation.md for register mapping.
 """
 
 import argparse

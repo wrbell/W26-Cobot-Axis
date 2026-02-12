@@ -93,24 +93,24 @@ The course requires following and documenting Bolton's mechatronics design proce
 
 ### Step 2: Problem Analysis — Complete
 
-- [x] Formal problem analysis — [`reqs/problem_analysis.md`](reqs/problem_analysis.md)
+- [x] Formal problem analysis — [`docs/problem_analysis.md`](docs/problem_analysis.md)
   - Environmental constraints, performance requirements, failure modes
   - Power constraints (2A @ 24V from UR30)
   - Communication constraints (RTDE 500Hz, non-RT Linux host)
-- [x] Latency analysis — [`reqs/latency_analysis.md`](reqs/latency_analysis.md) (~8ms typical, adequate for paste)
+- [x] Latency analysis — [`docs/latency_analysis.md`](docs/latency_analysis.md) (~8ms typical, adequate for paste)
 
 ### Step 3: Specification — In Progress
 
 - [ ] Write formal design specification (functions, interfaces, accuracy targets, operating environment)
-- [x] RTDE register allocation finalized — [`reqs/register_allocation.md`](reqs/register_allocation.md)
+- [x] RTDE register allocation finalized — [`docs/register_allocation.md`](docs/register_allocation.md)
 - [ ] Pin assignment table
 - [ ] Power budget worksheet
 
 ### Step 4: Possible Solutions — In Progress
 
-- [x] Firmware: Klipper vs Lingua Franca — [`reqs/trade_lingua_franca_vs_klipper.md`](reqs/trade_lingua_franca_vs_klipper.md)
-- [x] Communication: RTDE vs alternatives — [`reqs/trade_comms.md`](reqs/trade_comms.md)
-- [x] MCU platform: SKR Pico vs alternatives — [`reqs/trade_mcu.md`](reqs/trade_mcu.md)
+- [x] Firmware: Klipper vs Lingua Franca — [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md)
+- [x] Communication: RTDE vs alternatives — [`trades/comms.md`](trades/comms.md)
+- [x] MCU platform: SKR Pico vs alternatives — [`trades/mcu.md`](trades/mcu.md)
 - [ ] Location: end effector vs base-mounted vs gantry (Dawood)
 
 ### Step 5: Solution Selection — Complete
@@ -159,13 +159,13 @@ The course requires following and documenting Bolton's mechatronics design proce
 | | Circuit diagram (schematic) | Not started | 7–8 |
 | | Circuit layout (physical arrangement) | Not started | 8 |
 | | Mechanical component sketches (Dawood) | Not started | 7–8 |
-| **Trade studies** | Klipper vs Lingua Franca | **Complete** — [`trade_lingua_franca_vs_klipper.md`](reqs/trade_lingua_franca_vs_klipper.md) | 6 |
-| | Communication protocol | **Complete** — [`trade_comms.md`](reqs/trade_comms.md) | 6 |
-| | MCU platform | **Complete** — [`trade_mcu.md`](reqs/trade_mcu.md) | 6 |
+| **Trade studies** | Klipper vs Lingua Franca | **Complete** — [`lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | 6 |
+| | Communication protocol | **Complete** — [`comms.md`](trades/comms.md) | 6 |
+| | MCU platform | **Complete** — [`mcu.md`](trades/mcu.md) | 6 |
 | | Location (Dawood) | Not started | 7 |
-| **Analysis** | Problem analysis (Bolton Step 2) | **Complete** — [`problem_analysis.md`](reqs/problem_analysis.md) | 6 |
-| | RTDE register allocation | **Complete** — [`register_allocation.md`](reqs/register_allocation.md) | 6 |
-| | Latency analysis | **Complete** — [`latency_analysis.md`](reqs/latency_analysis.md) | 6 |
+| **Analysis** | Problem analysis (Bolton Step 2) | **Complete** — [`problem_analysis.md`](docs/problem_analysis.md) | 6 |
+| | RTDE register allocation | **Complete** — [`register_allocation.md`](docs/register_allocation.md) | 6 |
+| | Latency analysis | **Complete** — [`latency_analysis.md`](docs/latency_analysis.md) | 6 |
 | | Motor load / torque analysis | Pending hardware receipt | 8 |
 | | Power budget | Not started | 7 |
 | **Electrical** | Pin assignment table | Not started | 7 |
@@ -221,25 +221,26 @@ Functional testing done by **Mar 31**. Week 13 for documentation.
 ├── README.md                   # This file
 ├── schedule.md                 # Accelerated project schedule
 ├── todo.md                     # Project task tracker (Bolton process + phase deliverables)
-├── reqs/                       # Requirements and design process
-│   ├── about.md                # Course project overview and phase descriptions
+├── trades/                     # Trade studies
+│   ├── lingua_franca_vs_klipper.md  # Klipper (4.70) vs Lingua Franca (1.95)
+│   ├── comms.md                # RTDE vs alternative UR30 protocols
+│   └── mcu.md                  # SKR Pico vs alternative MCU platforms
+├── docs/                       # Engineering analysis and technical reference
+│   ├── problem_analysis.md     # Bolton Step 2: formal problem analysis
+│   ├── register_allocation.md  # RTDE register mapping (finalized)
+│   ├── latency_analysis.md     # End-to-end latency analysis
+│   ├── klipper_protocols.md    # Klipper API surface and serial protocol
+│   ├── skr_pico_specs.md       # SKR Pico V1.0 hardware reference
+│   ├── skr_pico_klipper_setup.md  # SKR Pico + Klipper setup guide
+│   ├── ur_rtde.md              # RTDE protocol, registers, latency
+│   └── pi_power.md             # Power requirements and budget
+├── reqs/                       # Course requirements and process
+│   ├── about.md                # Course project overview
 │   ├── initial_scope.md        # Project scope definition
 │   ├── phase2.md               # Phase 2 deliverable requirements
 │   ├── phase3.md               # Phase 3/4 final report requirements
 │   ├── process.md              # Bolton's 7-step design process
-│   ├── information_needs.md    # Data/information gaps per task
-│   ├── problem_analysis.md     # Bolton Step 2: formal problem analysis
-│   ├── register_allocation.md  # RTDE register mapping (finalized)
-│   ├── latency_analysis.md     # End-to-end latency analysis
-│   ├── trade_lingua_franca_vs_klipper.md  # Trade study: firmware
-│   ├── trade_comms.md          # Trade study: UR30 communication protocol
-│   └── trade_mcu.md            # Trade study: MCU platform
-├── tech_docs/                  # Technical research and reference docs
-│   ├── UR30/                   # UR30 user manual, RTDE protocol research
-│   ├── BigTree Controller/     # SKR Pico V1.0 specs, Klipper setup guide
-│   ├── Klipper/                # Klipper protocols and API reference
-│   └── Pi400/                  # Power requirements and budget
-└── init_docs/                  # Meeting notes and source PDFs
+│   └── information_needs.md    # Data/information gaps per task
 ```
 
 ## Key Documents
@@ -248,15 +249,15 @@ Functional testing done by **Mar 31**. Week 13 for documentation.
 |----------|-------------|
 | [`todo.md`](todo.md) | Full task list organized by Bolton's design process and project phases |
 | [`reqs/information_needs.md`](reqs/information_needs.md) | What data we still need to gather, per task |
-| [`reqs/problem_analysis.md`](reqs/problem_analysis.md) | Bolton Step 2: formal problem analysis |
-| [`reqs/register_allocation.md`](reqs/register_allocation.md) | RTDE register mapping — finalized design decision |
-| [`reqs/latency_analysis.md`](reqs/latency_analysis.md) | End-to-end latency analysis (~8ms typical) |
-| [`reqs/trade_lingua_franca_vs_klipper.md`](reqs/trade_lingua_franca_vs_klipper.md) | Trade study: Klipper (4.70) vs Lingua Franca (1.95) |
-| [`reqs/trade_comms.md`](reqs/trade_comms.md) | Trade study: RTDE vs alternative UR30 protocols |
-| [`reqs/trade_mcu.md`](reqs/trade_mcu.md) | Trade study: SKR Pico vs alternative MCU platforms |
-| [`tech_docs/BigTree Controller/skr_pico_v1_specs.md`](tech_docs/BigTree%20Controller/skr_pico_v1_specs.md) | SKR Pico V1.0 complete hardware reference |
-| [`tech_docs/UR30/ur_rtde_research.md`](tech_docs/UR30/ur_rtde_research.md) | RTDE protocol, register details, latency considerations |
-| [`tech_docs/Klipper/klipper_protocols.md`](tech_docs/Klipper/klipper_protocols.md) | Klipper API surface and serial protocol |
+| [`docs/problem_analysis.md`](docs/problem_analysis.md) | Bolton Step 2: formal problem analysis |
+| [`docs/register_allocation.md`](docs/register_allocation.md) | RTDE register mapping — finalized design decision |
+| [`docs/latency_analysis.md`](docs/latency_analysis.md) | End-to-end latency analysis (~8ms typical) |
+| [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | Trade study: Klipper (4.70) vs Lingua Franca (1.95) |
+| [`trades/comms.md`](trades/comms.md) | Trade study: RTDE vs alternative UR30 protocols |
+| [`trades/mcu.md`](trades/mcu.md) | Trade study: SKR Pico vs alternative MCU platforms |
+| [`docs/skr_pico_specs.md`](docs/skr_pico_specs.md) | SKR Pico V1.0 complete hardware reference |
+| [`docs/ur_rtde.md`](docs/ur_rtde.md) | RTDE protocol, register details, latency considerations |
+| [`docs/klipper_protocols.md`](docs/klipper_protocols.md) | Klipper API surface and serial protocol |
 
 ## Team
 

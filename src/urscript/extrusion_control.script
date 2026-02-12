@@ -3,7 +3,7 @@
 # Purpose: Writes extrusion commands to RTDE output registers,
 #          reads stepper status from RTDE input registers.
 #
-# Register mapping (from reqs/register_allocation.md):
+# Register mapping (from docs/register_allocation.md):
 #
 # OUTPUT (UR30 → Pi, written here):
 #   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)

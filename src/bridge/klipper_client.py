@@ -4,7 +4,7 @@ W26 Cobot Axis — Klipper Unix Socket Client
 Communicates with klippy via /tmp/klippy_uds.
 Protocol: newline-delimited JSON terminated by \\x03 (ETX).
 
-Reference: tech_docs/Klipper/klipper_protocols.md, Sections 2 & 6.
+Reference: docs/klipper_protocols.md, Sections 2 & 6.
 """
 
 import json

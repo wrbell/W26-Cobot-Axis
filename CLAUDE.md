@@ -25,7 +25,7 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 
 **Power:** 5.1V + 24V from UR controller power block (2A continuous, 3.5A burst). Total draw ~1.1A typical @ 24V.
 
-**Software stack:** Klipper (chosen over Lingua Franca — see `reqs/trade_lingua_franca_vs_klipper.md`). RTDE bridge daemon on Pi translates UR commands to Klipper G-code. `[manual_stepper]` config for single-axis control.
+**Software stack:** Klipper (chosen over Lingua Franca — see `trades/lingua_franca_vs_klipper.md`). RTDE bridge daemon on Pi translates UR commands to Klipper G-code. `[manual_stepper]` config for single-axis control.
 
 ## Task Tracking
 
@@ -40,9 +40,9 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 - `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
 - `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
 - `src/urscript/` — URScript programs for UR30 teach pendant
-- `reqs/` — Requirements, design process docs, trade studies, analysis
-- `tech_docs/` — Technical research (UR30, SKR Pico, Klipper, Pi400)
-- `init_docs/` — Meeting notes and source PDFs
+- `trades/` — Trade studies (comms protocol, MCU platform, Klipper vs Lingua Franca)
+- `docs/` — Engineering analysis and technical reference (latency, register allocation, hardware specs)
+- `reqs/` — Course requirements, scope, process docs
 - `schedule.md` — Accelerated project schedule (target completion Mar 31, official submission Apr 24)
 - `todo.md` — Master task tracker
 
@@ -62,7 +62,7 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 - **Robot:** Universal Robots UR30 (6-axis collaborative robot)
 - **Pi (headless):** Raspberry Pi — runs Klipper host + Moonraker + RTDE bridge daemon (real-time control node)
 - **Pi400:** Raspberry Pi 400 — HMI, SSH terminal, web UI access (Mainsail/Fluidd), development. Not in the real-time loop.
-- **Microcontroller:** BigTreeTech SKR Pico V1.0 (RP2040-based, 4x TMC2209 soldered, Klipper-compatible, 85x56mm). Product code 1060000513. Full specs in `tech_docs/BigTree Controller/skr_pico_v1_specs.md`.
+- **Microcontroller:** BigTreeTech SKR Pico V1.0 (RP2040-based, 4x TMC2209 soldered, Klipper-compatible, 85x56mm). Product code 1060000513. Full specs in `docs/skr_pico_specs.md`.
 - **Actuator:** Stepper motor + pump — will be provided to the team (specs TBD on receipt)
 - **Power:** 24V from UR controller power block → buck converters → 5.1V for Pi; 24V direct to SKR Pico VIN
 - **RTDE library:** `ur_rtde` (SDU, C++ with Python bindings) — recommended over official UR Python client
@@ -82,23 +82,23 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 
 | Topic | Location |
 |-------|----------|
-| Problem analysis (Bolton Step 2) | `reqs/problem_analysis.md` |
-| RTDE register allocation | `reqs/register_allocation.md` |
-| Latency analysis | `reqs/latency_analysis.md` |
-| Trade: Klipper vs Lingua Franca | `reqs/trade_lingua_franca_vs_klipper.md` |
-| Trade: Communication protocol | `reqs/trade_comms.md` |
-| Trade: MCU platform | `reqs/trade_mcu.md` |
+| Problem analysis (Bolton Step 2) | `docs/problem_analysis.md` |
+| RTDE register allocation | `docs/register_allocation.md` |
+| Latency analysis | `docs/latency_analysis.md` |
+| Trade: Klipper vs Lingua Franca | `trades/lingua_franca_vs_klipper.md` |
+| Trade: Communication protocol | `trades/comms.md` |
+| Trade: MCU platform | `trades/mcu.md` |
 | Information needs tracker | `reqs/information_needs.md` |
 
-## Research Documents
+## Reference Documents
 
 | Topic | Location |
 |-------|----------|
-| Klipper protocols & API | `tech_docs/Klipper/klipper_protocols.md` |
-| SKR Pico V1.0 hardware specs | `tech_docs/BigTree Controller/skr_pico_v1_specs.md` |
-| SKR Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
-| UR RTDE protocol & latency | `tech_docs/UR30/ur_rtde_research.md` |
-| Power requirements | `tech_docs/Pi400/power_requirements.md` |
+| Klipper protocols & API | `docs/klipper_protocols.md` |
+| SKR Pico V1.0 hardware specs | `docs/skr_pico_specs.md` |
+| SKR Pico + Klipper setup | `docs/skr_pico_klipper_setup.md` |
+| UR RTDE protocol & latency | `docs/ur_rtde.md` |
+| Power requirements | `docs/pi_power.md` |
 
 ## Stretch Goals
 

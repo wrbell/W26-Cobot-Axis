@@ -5,8 +5,8 @@ Wraps the ur_rtde library (SDU) for reading UR30 output registers
 and writing input registers. Falls back to the official UR RTDE
 Python client if ur_rtde is unavailable.
 
-Reference: tech_docs/UR30/ur_rtde_research.md
-Register mapping: reqs/register_allocation.md
+Reference: docs/ur_rtde.md
+Register mapping: docs/register_allocation.md
 """
 
 import logging

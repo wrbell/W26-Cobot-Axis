@@ -7,7 +7,7 @@ What data/information we **don't currently have** but need to complete each Phas
 > - **Pump and motor:** Will be **provided to the team** — not sized/selected by us. Specs will be filled in once received. Design must accommodate a range of pump types and NEMA 17-class motors.
 > - **Pi model:** Use a non-Pi400 Pi as the headless control node. Pi400 is optional HMI — system must run standalone (UR30 → Pi → SKR Pico → stepper) without it.
 > - **Budget:** Not a constraint — instructor purchases from UMich suppliers.
-> - **BTT board:** Confirmed as SKR Pico V1.0 (product code 1060000513). Full specs in `tech_docs/BigTree Controller/skr_pico_v1_specs.md`.
+> - **BTT board:** Confirmed as SKR Pico V1.0 (product code 1060000513). Full specs in `docs/skr_pico_specs.md`.
 
 ---
 
@@ -41,7 +41,7 @@ What data/information we **don't currently have** but need to complete each Phas
 
 | Need | What Specifically | Source |
 |------|-------------------|--------|
-| Finalized register allocation | We have a *proposed* mapping in `tech_docs/UR30/ur_rtde_research.md` but it's not confirmed. Need to decide which registers carry which signals. | **Design decision — finalize from proposal** |
+| Finalized register allocation | We have a *proposed* mapping in `docs/ur_rtde.md` but it's not confirmed. Need to decide which registers carry which signals. | **Design decision — finalize from proposal** |
 | Feedback signals list | Exactly which status values flow back from Klipper → RTDE → UR30 (position, velocity, fault, temperature?) | **Design decision** |
 | URScript program structure | How the UR30 program is organized — what triggers extrusion start/stop, how speed is synchronized with robot TCP speed | **Design decision + URScript programming** |
 
@@ -52,10 +52,10 @@ What data/information we **don't currently have** but need to complete each Phas
 | Need | What Specifically | Source |
 |------|-------------------|--------|
 | Buck converter selection | We recommend Pololu D24V22F5 but haven't confirmed. Need: one or two units? Pi400 is optional, so maybe just one for the headless Pi. | **Design decision** |
-| UR30 power block pinout | Which pins/terminals on the UR30 controller provide 24V, and how to physically connect (screw terminal? connector type?) | **UR30 User Manual** (`tech_docs/UR30/`) — look up tool connector and controller I/O pinout |
+| UR30 power block pinout | Which pins/terminals on the UR30 controller provide 24V, and how to physically connect (screw terminal? connector type?) | **UR30 User Manual** (`docs/`) — look up tool connector and controller I/O pinout |
 | UR30 ethernet port location | Which ethernet port on the UR30 controller is available for RTDE? Is it shared with the teach pendant? | **UR30 User Manual** or **test in lab** |
 | Cable lengths needed | Distance from UR30 controller to Pi, Pi to SKR Pico, SKR Pico to motor. Affects wire gauge and voltage drop. | **Measure in lab** |
-| Connector types | What connectors does the UR30 power block use? SKR Pico uses screw terminals for VIN. | UR30 Manual + `tech_docs/BigTree Controller/skr_pico_v1_specs.md` |
+| Connector types | What connectors does the UR30 power block use? SKR Pico uses screw terminals for VIN. | UR30 Manual + `docs/skr_pico_specs.md` |
 | Pi model selection | Which non-Pi400 Pi do we have or will purchase? Pi 4B recommended (ethernet + USB). | **Check inventory / purchase** |
 | Pi power input method | Power via buck converter to USB-C? Or via GPIO header pins 2+4 (5V) + pin 6 (GND)? GPIO bypasses the onboard voltage regulator. | **Design decision** |
 
@@ -74,7 +74,7 @@ What data/information we **don't currently have** but need to complete each Phas
 
 | Need | What Specifically | Source |
 |------|-------------------|--------|
-| SKR Pico pinout | **We have this** — documented in `tech_docs/BigTree Controller/skr_pico_v1_specs.md` | Already documented |
+| SKR Pico pinout | **We have this** — documented in `docs/skr_pico_specs.md` | Already documented |
 | Which stepper driver socket to use | SKR Pico has 4x TMC2209 (X, Y, Z, E). Which one drives our motor? Affects step/dir/enable/DIAG pin assignments. | **Design decision** (E-stepper recommended — most intuitive for pump extrusion) |
 | Pi GPIO usage | Are any Pi GPIO pins needed beyond USB serial to BTT Pico? (e.g., status LED, emergency stop input, fan control) | **Design decision** |
 | UR30 I/O pin allocation | Which UR30 digital I/O pins (if any) are used beyond RTDE software registers? (e.g., hardware emergency stop) | **Design decision + UR30 I/O panel inspection** |
@@ -115,7 +115,7 @@ What data/information we **don't currently have** but need to complete each Phas
 |------|-------------------|--------|
 | UR30 end effector interface dimensions | Bolt pattern, flange diameter, mounting hole locations for the UR30 tool flange | **UR30 User Manual** — mechanical interface drawing |
 | Motor dimensions | Depends on motor provided. NEMA 17 is 31mm bolt spacing (standard). | **Awaiting provided hardware** |
-| SKR Pico mounting holes | Board dimensions: 85 x 56mm, Pi-compatible mounting holes. See `tech_docs/BigTree Controller/skr_pico_v1_specs.md`. | **Documented** |
+| SKR Pico mounting holes | Board dimensions: 85 x 56mm, Pi-compatible mounting holes. See `docs/skr_pico_specs.md`. | **Documented** |
 | Pi mounting holes | Depends on Pi model selected. Pi 4B: 58x49mm hole pattern. | **Pi documentation** |
 | Available 3D printer specs | What printer does Prof. Pannier have? Print volume, material (PLA? PETG? ABS?), layer resolution? | **Ask Prof. Pannier** |
 
@@ -138,7 +138,7 @@ What data/information we **don't currently have** but need to complete each Phas
 |------|-------------------|--------|
 | Pump back-pressure / torque requirement | Force/torque needed to drive the pump with metal paste at target flow rate. Characterize once hardware is received. | **Awaiting provided hardware** |
 | Motor torque-speed curve | How torque drops off with RPM for our specific motor. | **Motor datasheet — awaiting provided hardware** |
-| TMC2209 thermal limits on SKR Pico | Board thermal limit is ~0.8A without fan, ~1.2A with active cooling. See `tech_docs/BigTree Controller/skr_pico_v1_specs.md`. | **Documented — verify in lab** |
+| TMC2209 thermal limits on SKR Pico | Board thermal limit is ~0.8A without fan, ~1.2A with active cooling. See `docs/skr_pico_specs.md`. | **Documented — verify in lab** |
 | Microstepping decision | 16x (default) vs 32x vs 64x — affects resolution, max speed, and torque. | **Design decision after knowing speed/torque needs** |
 
 ---

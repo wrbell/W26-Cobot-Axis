@@ -2,7 +2,7 @@
 W26 Cobot Axis — Bridge Daemon Configuration
 
 RTDE register mappings, connection defaults, and Klipper settings.
-Based on reqs/register_allocation.md.
+Based on docs/register_allocation.md.
 """
 
 # ---------------------------------------------------------------------------

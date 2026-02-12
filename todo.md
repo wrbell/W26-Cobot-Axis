@@ -20,19 +20,19 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [x] Document in `reqs/initial_scope.md`
 
 ### Step 2: Analysis of the Problem — Complete
-- [x] Formal problem analysis → `reqs/problem_analysis.md`
-- [x] Latency analysis → `reqs/latency_analysis.md`
+- [x] Formal problem analysis → `docs/problem_analysis.md`
+- [x] Latency analysis → `docs/latency_analysis.md`
 
 ### Step 3: Preparation of a Specification — In Progress
-- [x] RTDE register allocation finalized → `reqs/register_allocation.md`
+- [x] RTDE register allocation finalized → `docs/register_allocation.md`
 - [ ] **Write formal design specification** — functions, interfaces, accuracy targets, operating environment
 - [ ] Pin assignment table
 - [ ] Power budget worksheet
 
 ### Step 4: Generation of Possible Solutions — In Progress
-- [x] Lingua Franca vs Klipper → `reqs/trade_lingua_franca_vs_klipper.md` (Klipper: 4.70 vs 1.95)
-- [x] Communication protocol → `reqs/trade_comms.md` (RTDE: 4.85 vs next-best 3.30)
-- [x] MCU platform → `reqs/trade_mcu.md` (SKR Pico selected)
+- [x] Lingua Franca vs Klipper → `trades/lingua_franca_vs_klipper.md` (Klipper: 4.70 vs 1.95)
+- [x] Communication protocol → `trades/comms.md` (RTDE: 4.85 vs next-best 3.30)
+- [x] MCU platform → `trades/mcu.md` (SKR Pico selected)
 - [ ] **Location trade study** — end effector vs base-mounted vs gantry (Dawood)
 
 ### Step 5: Selection of a Suitable Solution — Complete
@@ -78,9 +78,9 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [ ] **Mechanical component sketches** (Dawood)
 
 ### Trade Studies
-- [x] Lingua Franca vs Klipper → `reqs/trade_lingua_franca_vs_klipper.md`
-- [x] Communication protocol → `reqs/trade_comms.md`
-- [x] MCU platform → `reqs/trade_mcu.md`
+- [x] Lingua Franca vs Klipper → `trades/lingua_franca_vs_klipper.md`
+- [x] Communication protocol → `trades/comms.md`
+- [x] MCU platform → `trades/mcu.md`
 - [ ] **Location trade study** (Dawood)
 - [ ] **Present trade studies to Prof. Pannier**
 
@@ -98,8 +98,8 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [ ] Design sketches for each part
 
 ### Engineering Analysis
-- [x] Latency analysis → `reqs/latency_analysis.md`
-- [x] Problem analysis → `reqs/problem_analysis.md`
+- [x] Latency analysis → `docs/latency_analysis.md`
+- [x] Problem analysis → `docs/problem_analysis.md`
 - [ ] **Motor load calculations** — pending hardware receipt
 - [ ] **Torque analysis** — pending hardware receipt
 - [ ] **Power budget analysis**
@@ -124,7 +124,7 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] `rtde_client.py` — ur_rtde wrapper with stub fallback for dev without robot
 - [x] `bridge_daemon.py` — main loop: RTDE read → translate → Klipper command → status writeback
 - [x] `__main__.py` — entry point for `python -m bridge`
-- [x] Register allocation implemented matching `reqs/register_allocation.md`
+- [x] Register allocation implemented matching `docs/register_allocation.md`
 - [x] E-stop, homing, enable/disable, mode switching
 - [x] Reconnection logic for dropped RTDE or Klipper connections
 - [x] `--dry-run` mode for testing without Klipper
@@ -227,18 +227,18 @@ All software in `src/`. Can be developed and tested without physical hardware.
 
 | Document | Location |
 |----------|----------|
-| Problem analysis (Bolton Step 2) | `reqs/problem_analysis.md` |
-| RTDE register allocation | `reqs/register_allocation.md` |
-| Latency analysis | `reqs/latency_analysis.md` |
-| Trade: Klipper vs Lingua Franca | `reqs/trade_lingua_franca_vs_klipper.md` |
-| Trade: Communication protocol | `reqs/trade_comms.md` |
-| Trade: MCU platform | `reqs/trade_mcu.md` |
+| Problem analysis (Bolton Step 2) | `docs/problem_analysis.md` |
+| RTDE register allocation | `docs/register_allocation.md` |
+| Latency analysis | `docs/latency_analysis.md` |
+| Trade: Klipper vs Lingua Franca | `trades/lingua_franca_vs_klipper.md` |
+| Trade: Communication protocol | `trades/comms.md` |
+| Trade: MCU platform | `trades/mcu.md` |
 | Information needs tracker | `reqs/information_needs.md` |
-| Klipper protocols & API | `tech_docs/Klipper/klipper_protocols.md` |
-| SKR Pico V1.0 specs | `tech_docs/BigTree Controller/skr_pico_v1_specs.md` |
-| SKR Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
-| UR RTDE research | `tech_docs/UR30/ur_rtde_research.md` |
-| Power requirements | `tech_docs/Pi400/power_requirements.md` |
+| Klipper protocols & API | `docs/klipper_protocols.md` |
+| SKR Pico V1.0 specs | `docs/skr_pico_specs.md` |
+| SKR Pico + Klipper setup | `docs/skr_pico_klipper_setup.md` |
+| UR RTDE research | `docs/ur_rtde.md` |
+| Power requirements | `docs/pi_power.md` |
 | Design process | `reqs/process.md` |
 | Phase 2 requirements | `reqs/phase2.md` |
 | Phase 3/4 requirements | `reqs/phase3.md` |
