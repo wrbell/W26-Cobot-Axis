@@ -25,7 +25,7 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 
 ### Step 3: Preparation of a Specification — In Progress
 - [x] RTDE register allocation finalized → `docs/register_allocation.md`
-- [ ] **Write formal design specification** — functions, interfaces, accuracy targets, operating environment
+- [x] **Formal design specification** → `docs/design_specification.md` — 25 "shall" statements, interface tables, performance targets
 - [ ] Pin assignment table
 - [ ] Power budget worksheet
 
@@ -129,36 +129,36 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] Reconnection logic for dropped RTDE or Klipper connections
 - [x] `--dry-run` mode for testing without Klipper
 
-#### Enhancements — TODO
-- [ ] **Add Klipper status subscription** — read `motion_report.live_extruder_velocity` for actual rate feedback (currently reports commanded rate)
-- [ ] **Speed-proportional extrusion mode** — bridge computes rate from TCP speed × multiplier instead of using UR30-computed rate
-- [ ] **Add data logging** — log commanded vs actual rates, timestamps, latency measurements to CSV for Phase 4 analysis
-- [ ] **Watchdog timer** — detect if RTDE stops updating (UR30 program paused/stopped) and auto-disable stepper
-- [ ] **Configurable extrusion profiles** — support non-linear rate mapping (e.g., lookup table, polynomial)
-- [ ] **Add Dashboard Server client** — connect to UR30 port 29999 for robot lifecycle management (program start/stop, mode query)
+#### Enhancements — Written
+- [x] **Klipper status subscription** — TMC2209 driver status polling with stall detection (`klipper_status.py`)
+- [x] **Speed-proportional extrusion mode** — bridge-computed rate from TCP speed × multiplier
+- [x] **Data logging** — 17-column CSV with file rotation and event annotations (`data_logger.py`)
+- [x] **Watchdog timer** — RTDE timestamp-based stale detection, 0.5s timeout (`watchdog.py`)
+- [x] **Configurable extrusion profiles** — linear, polynomial, lookup table (`extrusion_profile.py`, `profiles.json`)
+- [x] **Dashboard Server client** — UR30 port 29999 lifecycle management (`dashboard_client.py`)
 
-#### Testing — TODO
-- [ ] **Unit tests for `klipper_client.py`** — mock Unix socket, test JSON protocol, error handling
-- [ ] **Unit tests for `rtde_client.py`** — test stub mode, register read/write
-- [ ] **Unit tests for `bridge_daemon.py`** — test command translation, e-stop, mode switching, reconnection
-- [ ] **Set up URSim** — UR simulator (Docker) for RTDE integration testing without physical robot
+#### Testing
+- [x] **Unit tests for `klipper_client.py`** — 42 tests, mock Unix socket, JSON protocol, error handling
+- [x] **Unit tests for `rtde_client.py`** — 34 tests, stub mode, register read/write
+- [x] **Unit tests for `bridge_daemon.py`** — 71 tests, command translation, e-stop, mode switching, reconnection
+- [ ] **Set up URSim on Windows** — `docker run --platform=linux/amd64 -e ROBOT_MODEL=UR30 -p 30004:30004 -p 29999:29999 -p 6080:6080 universalrobots/ursim_e-series` (native x86, no emulation needed)
 - [ ] **Integration test: bridge + URSim** — verify register read/write, mode transitions, fault injection
 
 ### Klipper Configuration (`src/klipper/`)
 - [x] `printer.cfg` — SKR Pico config with `[manual_stepper pump]`, TMC2209 UART, E-axis driver
-- [ ] **Write `moonraker.conf`** — Moonraker API config (port 7125, trusted clients, CORS)
-- [ ] **Write `mainsail.conf`** or equivalent — web UI config for monitoring (optional, for Pi400 HMI)
+- [x] `moonraker.conf` — Moonraker API config (port 7125, trusted clients, CORS, update manager)
+- [x] `mainsail.cfg` — Pump-specific macros (PUMP_STATUS, PUMP_TEST, PUMP_ENABLE/DISABLE, PUMP_ZERO)
 
 ### URScript (`src/urscript/`)
 - [x] `extrusion_control.script` — helper functions, speed-sync extrusion, retraction, fault checking
 - [x] `test_basic.script` — system validation test (9 sub-tests: init, enable/disable, extrude, retract, homing, e-stop, speed-sync, fault handling, readback)
 - [x] `test_calibration.script` — pump calibration (4 sub-tests: flow rate linearity, speed-sync gravimetric, retraction effectiveness, latency measurement)
 
-### Deployment
-- [ ] **Write `requirements.txt`** — Python dependencies (ur-rtde, etc.)
-- [ ] **Write systemd service file** — auto-start bridge daemon on Pi boot
-- [ ] **Write deployment script** — install deps, copy configs, set up Klipper, flash firmware
-- [ ] **Write setup instructions** — step-by-step for reproducing the full software stack on a fresh Pi
+### Deployment — Written
+- [x] `requirements.txt` — Python dependencies (ur-rtde)
+- [x] `src/systemd/w26-bridge.service` — systemd service, auto-start after Klipper
+- [x] `deploy.sh` — 11-step deployment script (deps, configs, firmware, verification)
+- [x] `SETUP.md` — step-by-step setup instructions for fresh Pi
 
 ### Design Documents — Complete
 All software features are being designed before implementation. Design docs in `docs/design/`.
@@ -174,7 +174,7 @@ All software features are being designed before implementation. Design docs in `
 - [x] **Network architecture** → `docs/design/network_architecture.md`
 - [x] **Phase 2 memo outline** → `docs/design/phase2_memo_outline.md`
 - [x] **Final report outline** → `docs/design/final_report_outline.md`
-- [ ] **Update `docs/pi_power.md`** — fix stale dual-Pi architecture references
+- [x] **Update `docs/pi_power.md`** — fixed stale dual-Pi architecture references
 
 ---
 
