@@ -6,21 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 University capstone project (ME472 - Mechatronics) to develop a stepper motor driver that takes commands from a Universal Robots UR30 controller to function as an additional (7th) axis of motion. The stepper motor provides extrusion control.
 
-**System architecture (revised per Pannier Review):**
+**System architecture:**
 ```
-UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi400 (Klipper host)  ──▶  Slave Pi (comms bridge)  ──Serial──▶  BigTree Pico (RP2040)  ──▶  Stepper Motor
-     (URScript)              (may need network switch)           (Klipper serial)              (firmware)        (extrusion)
+                              ┌─── Pi400 (HMI / SSH / monitoring)
+                              │       (development terminal, not in real-time loop)
+                              │
+UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Serial──▶  BTT Pico (RP2040)  ──▶  Stepper Motor
+     (URScript)              (gigabit switch)                                  (Klipper MCU)         (extrusion)
 ```
 
 **Communication chain:**
-- UR30 ↔ Pi400: RTDE over TCP/IP (ethernet, may need a gigabit switch)
-- Pi400 ↔ Slave Pi: Klipper control signals
-- Slave Pi ↔ BigTree Pico: Serial (via Klipper)
-- BigTree Pico → Stepper: PWM/TBD
+- UR30 ↔ Pi: RTDE over TCP/IP on port 30004 (ethernet, needs a gigabit switch)
+- Pi → Klipper: Unix socket (`/tmp/klippy_uds`) — lowest latency path
+- Pi ↔ BTT Pico: USB serial (Klipper's native MCU protocol)
+- BTT Pico → Stepper: TMC2209 drivers (StealthChop/SpreadCycle)
+- Pi400: sits on the same network for SSH access, Moonraker/Mainsail web UI, development, and monitoring — not in the real-time control path
+- Estimated end-to-end latency: 5–20ms typical
 
-**Power:** 5.1V, 24V from UR controller (powers Pi, microcontroller, and actuator).
+**Power:** 5.1V + 24V from UR controller power block (2A continuous, 3.5A burst). Total draw ~1.1A typical @ 24V.
 
-**Languages:** URScript (robot side), C++ or MicroPython (RP2040/Pico firmware). Lingua Franca was considered but requires trade study vs Klipper.
+**Software stack:** Klipper (chosen over Lingua Franca — see `reqs/trade_lingua_franca_vs_klipper.md`). RTDE bridge daemon on Pi translates UR commands to Klipper G-code. `[manual_stepper]` config for single-axis control.
 
 ## Repository Structure
 
@@ -43,21 +48,28 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 ## Key Technical Details
 
 - **Robot:** Universal Robots UR30 (6-axis collaborative robot)
-- **Master Pi:** Raspberry Pi 400 — runs Klipper as host, receives RTDE commands from UR30
-- **Slave Pi:** Second Raspberry Pi — bridges comms between Klipper host and microcontroller
-- **Microcontroller:** BigTree Pico (RP2040-based 3D printer controller variant)
-- **Actuator:** Stepper motor (~24V) for extrusion control
-- **Power:** 5.1V + 24V from UR controller
-- **Firmware platform:** Klipper
+- **Pi (headless):** Raspberry Pi — runs Klipper host + Moonraker + RTDE bridge daemon (real-time control node)
+- **Pi400:** Raspberry Pi 400 — HMI, SSH terminal, web UI access (Mainsail/Fluidd), development. Not in the real-time loop.
+- **Microcontroller:** BTT Pico (RP2040-based, 4x TMC2209 drivers, Klipper-compatible)
+- **Actuator:** Stepper motor (~24V, NEMA 17 class) for extrusion control
+- **Power:** 24V from UR controller power block → buck converters → 5.1V for Pi + Pi400; 24V direct to BTT Pico VIN
+- **RTDE library:** `ur_rtde` (SDU, C++ with Python bindings) — recommended over official UR Python client
 
-## Open Questions (from Pannier Review)
+## Research Documents
 
-- Latency impact of ethernet comms chain — is it acceptable relative to print speed? Can G-code execution be timeshifted if latency is predictable?
-- URScript ↔ Klipper bidirectionality — what protocols does Klipper support? May need forked features.
-- UR CAPs (URCaps) creation process
-- Stallguard torque feedback from stepper back to URScript (stretch goal)
-- Lingua Franca vs Klipper trade study (language/framework decision)
-- Pi ↔ Microcontroller protocol trade (serial via Klipper vs alternatives)
+| Topic | Location |
+|-------|----------|
+| Klipper protocols & API | `tech_docs/Klipper/klipper_protocols.md` |
+| BTT Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
+| UR RTDE protocol & latency | `tech_docs/UR30/ur_rtde_research.md` |
+| Power requirements | `tech_docs/Pi400/power_requirements.md` |
+| Lingua Franca vs Klipper trade | `reqs/trade_lingua_franca_vs_klipper.md` |
+
+## Stretch Goals
+
+- Stallguard torque feedback from TMC2209 → Klipper `register_remote_method` → RTDE → URScript
+- URCap for teach pendant UI (Java SDK, not needed for MVP)
+- Predictive G-code timeshifting using Klipper's ~100ms lookahead buffer
 
 ## Team Responsibilities
 
