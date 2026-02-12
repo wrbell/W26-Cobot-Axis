@@ -26,8 +26,8 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 ### Step 3: Preparation of a Specification — In Progress
 - [x] RTDE register allocation finalized → `docs/register_allocation.md`
 - [x] **Formal design specification** → `docs/design_specification.md` — 25 "shall" statements, interface tables, performance targets
-- [ ] Pin assignment table
-- [ ] Power budget worksheet
+- [x] Pin assignment table (rough draft) → `docs/phase2/pin_assignments.md`
+- [x] Power budget worksheet (rough draft) → `docs/phase2/power_budget.md`
 
 ### Step 4: Generation of Possible Solutions — In Progress
 - [x] Lingua Franca vs Klipper → `trades/lingua_franca_vs_klipper.md` (Klipper: 4.70 vs 1.95)
@@ -43,11 +43,12 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [ ] **Present trade studies to Prof. Pannier** — address Lingua Franca suggestion
 
 ### Step 6: Production of a Detailed Design — In Progress
-- [ ] Circuit diagram (schematic)
-- [ ] Circuit layout (physical arrangement)
-- [ ] Block diagram of functions/signals
-- [ ] Bill of materials with purchasing instructions
-- [ ] Engineering analysis (motor loads, power budget)
+- [x] Circuit diagram description (rough draft) → `docs/phase2/circuit_schematic.md`
+- [ ] Circuit layout (physical arrangement) — Dawood + Willem
+- [x] Block diagram of functions/signals (rough draft) → `docs/phase2/block_diagram.md`
+- [x] Bill of materials with purchasing instructions (rough draft) → `docs/phase2/bom.md`
+- [x] Buck converter selection → `docs/phase2/buck_converter.md` — Pololu D24V22F5
+- [ ] Engineering analysis (motor loads — pending hardware receipt)
 - [ ] 3D-printed component designs (Dawood)
 
 ### Step 7: Production of Working Drawings — Upcoming
@@ -72,9 +73,9 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 **Deliverable:** Written memo (PDF, ≤5 pages) with preliminary design, BOM, and analysis.
 
 ### Required Diagrams
-- [ ] **Block diagram of functions/signals** — data flow with feedback path
-- [ ] **Circuit diagram (schematic)** — UR30 power → buck converters → Pi + SKR Pico → stepper
-- [ ] **Circuit layout** — physical arrangement
+- [x] **Block diagram of functions/signals** — rough draft → `docs/phase2/block_diagram.md` (needs redraw in draw.io/Visio)
+- [x] **Circuit diagram (schematic)** — rough draft → `docs/phase2/circuit_schematic.md` (needs redraw in KiCad/draw.io)
+- [ ] **Circuit layout** — physical arrangement (Dawood + Willem)
 - [ ] **Mechanical component sketches** (Dawood)
 
 ### Trade Studies
@@ -85,13 +86,13 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [ ] **Present trade studies to Prof. Pannier**
 
 ### Electrical Documentation
-- [ ] **Pin assignment table** — all devices
-- [ ] **Power budget worksheet**
-- [ ] **Select buck converters** — Pololu D24V22F5, add to BOM
+- [x] **Pin assignment table** — rough draft → `docs/phase2/pin_assignments.md`
+- [x] **Power budget worksheet** — rough draft → `docs/phase2/power_budget.md`
+- [x] **Select buck converters** — Pololu D24V22F5 selected → `docs/phase2/buck_converter.md`
 
 ### Bill of Materials
-- [ ] **Draft BOM** with UMich supplier part numbers
-- [ ] **Write purchasing instructions**
+- [x] **Draft BOM** with DigiKey/Newark part numbers → `docs/phase2/bom.md` (~$128 total, 28 items)
+- [x] **Write purchasing instructions** — included in `docs/phase2/bom.md`
 
 ### 3D-Printed Components (Dawood)
 - [ ] Identify which components need 3D printing
@@ -102,7 +103,14 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [x] Problem analysis → `docs/problem_analysis.md`
 - [ ] **Motor load calculations** — pending hardware receipt
 - [ ] **Torque analysis** — pending hardware receipt
-- [ ] **Power budget analysis**
+- [x] **Power budget analysis** — rough draft → `docs/phase2/power_budget.md`
+
+### Phase 2 Memo Draft
+- [x] **Memo text draft** — all 8 sections (~1,400 words) → `docs/phase2/memo_draft.md`
+- [ ] Redraw block diagram in draw.io/Visio (from `docs/phase2/block_diagram.md`)
+- [ ] Redraw circuit schematic in KiCad/draw.io (from `docs/phase2/circuit_schematic.md`)
+- [ ] Verify DigiKey/Newark part numbers and stock
+- [ ] Dawood: write Section 5 (mechanical concept) + Figures 3–4
 
 ### Phase 2 Submission
 - [ ] **Compile Phase 2 PDF** (≤5 pages)
