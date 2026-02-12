@@ -1,0 +1,193 @@
+# W26 Cobot Axis — URScript Extrusion Control Program
+# Runs on: UR30 teach pendant / controller
+# Purpose: Writes extrusion commands to RTDE output registers,
+#          reads stepper status from RTDE input registers.
+#
+# Register mapping (from reqs/register_allocation.md):
+#
+# OUTPUT (UR30 → Pi, written here):
+#   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)
+#   output_double_register_0 = commanded extrusion rate (mm/s)
+#   output_double_register_1 = TCP speed magnitude (mm/s)
+#   output_bit_register_64   = extrusion enable
+#   output_bit_register_65   = emergency stop
+#   output_bit_register_66   = home stepper
+#
+# INPUT (Pi → UR30, read here):
+#   input_int_register_0     = stepper status (0=idle, 1=running, 2=error, 3=homing)
+#   input_int_register_1     = error code (0=none, 1=comms_lost, 2=stall, 3=thermal)
+#   input_double_register_0  = actual extrusion rate (mm/s)
+#   input_bit_register_64    = stepper ready
+#   input_bit_register_65    = stepper fault
+
+# ===================================================================
+# Configuration — adjust these for your application
+# ===================================================================
+EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
+MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
+ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
+
+# ===================================================================
+# Helper functions
+# ===================================================================
+
+def set_extrusion_mode(mode):
+    # mode: 0=off, 1=extrude, 2=retract
+    write_output_integer_register(0, mode)
+end
+
+def set_extrusion_rate(rate_mm_s):
+    # Clamp to safety limit
+    local clamped = rate_mm_s
+    if clamped > MAX_EXTRUSION_RATE:
+        clamped = MAX_EXTRUSION_RATE
+    end
+    write_output_float_register(0, clamped)
+end
+
+def set_extrusion_enable(enabled):
+    write_output_boolean_register(64, enabled)
+end
+
+def set_estop(active):
+    write_output_boolean_register(65, active)
+end
+
+def set_home_command(active):
+    write_output_boolean_register(66, active)
+end
+
+def update_tcp_speed():
+    # Write current TCP speed to output register for bridge daemon
+    local speed_vec = get_actual_tcp_speed()
+    local speed_mag = norm(speed_vec)
+    local speed_mm_s = speed_mag * 1000.0
+    write_output_float_register(1, speed_mm_s)
+    return speed_mm_s
+end
+
+def get_stepper_status():
+    return read_input_integer_register(0)
+end
+
+def get_stepper_error():
+    return read_input_integer_register(1)
+end
+
+def get_actual_extrusion_rate():
+    return read_input_float_register(0)
+end
+
+def is_stepper_ready():
+    return read_input_boolean_register(64)
+end
+
+def is_stepper_fault():
+    return read_input_boolean_register(65)
+end
+
+def wait_for_stepper_ready(timeout_s):
+    local t0 = 0.0
+    while is_stepper_ready() == False:
+        sync()
+        t0 = t0 + get_steptime()
+        if t0 > timeout_s:
+            popup("Stepper not ready — timeout", error=True)
+            return False
+        end
+    end
+    return True
+end
+
+# ===================================================================
+# Initialize — clear all registers
+# ===================================================================
+
+def init_registers():
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
+    set_extrusion_enable(False)
+    set_estop(False)
+    set_home_command(False)
+    write_output_float_register(1, 0.0)
+end
+
+# ===================================================================
+# Main extrusion control
+# ===================================================================
+
+def extrude_along_path(target_pose, speed, accel):
+    # Enable extrusion system
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)   # extrude
+
+    # Wait for stepper to be ready (5 second timeout)
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_enable(False)
+        return
+    end
+
+    # Start robot motion
+    movel(target_pose, a=accel, v=speed)
+
+    # Synchronize extrusion with robot speed
+    while is_steady() == False:
+        local tcp_speed = update_tcp_speed()
+
+        if ENABLE_SPEED_SYNC:
+            local rate = tcp_speed * EXTRUSION_MULTIPLIER
+            set_extrusion_rate(rate)
+        end
+
+        # Check for stepper faults
+        if is_stepper_fault():
+            local err = get_stepper_error()
+            popup(str_cat("Stepper fault: error code ", err), error=True)
+            stopl(2.0)   # decelerate robot to stop
+            break
+        end
+
+        sync()
+    end
+
+    # Stop extrusion
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+def retract(distance_mm, speed_mm_s):
+    # Brief retraction to relieve pressure (anti-ooze)
+    set_extrusion_enable(True)
+    set_extrusion_mode(2)   # retract
+    set_extrusion_rate(speed_mm_s)
+
+    # Wait for the retraction to complete (approximate timing)
+    local retract_time = distance_mm / speed_mm_s
+    sleep(retract_time)
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+# ===================================================================
+# Example program — replace with actual deposition path
+# ===================================================================
+
+# Initialize
+init_registers()
+
+# Home the stepper (zero position reference)
+set_home_command(True)
+sync()
+set_home_command(False)
+sleep(1.0)
+
+# Example: extrude along a linear path
+# Replace target_pose with your actual waypoints
+# extrude_along_path(p[0.3, -0.2, 0.1, 0, 3.14, 0], 0.05, 0.5)
+
+# Example: retract 2mm at 10 mm/s after deposition
+# retract(2.0, 10.0)
+
+# Cleanup
+init_registers()

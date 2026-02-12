@@ -4,7 +4,7 @@ What data/information we **don't currently have** but need to complete each Phas
 
 > **Key decisions made (2026-02-12):**
 > - **Extrusion type:** Metal paste dispensing via a stepper-driven pump (mechanism TBD)
-> - **Stepper motor:** Not yet selected — needs to be purchased. Selection depends on pump torque requirements.
+> - **Pump and motor:** Will be **provided to the team** — not sized/selected by us. Specs will be filled in once received. Design must accommodate a range of pump types and NEMA 17-class motors.
 > - **Pi model:** Use a non-Pi400 Pi as the headless control node. Pi400 is optional HMI — system must run standalone (UR30 → Pi → SKR Pico → stepper) without it.
 > - **Budget:** Not a constraint — instructor purchases from UMich suppliers.
 > - **BTT board:** Confirmed as SKR Pico V1.0 (product code 1060000513). Full specs in `tech_docs/BigTree Controller/skr_pico_v1_specs.md`.
@@ -16,7 +16,7 @@ What data/information we **don't currently have** but need to complete each Phas
 | Need | What Specifically | Status |
 |------|-------------------|--------|
 | ~~Extrusion mechanism type~~ | ~~What are we extruding?~~ **RESOLVED: Metal paste via stepper-driven pump** | **Answered** |
-| Pump selection / mechanism | What pump? Syringe pump, peristaltic pump, progressive cavity pump? Each has different torque/speed/flow characteristics. | **Design decision — research pump types for metal paste** |
+| Pump selection / mechanism | What pump? Syringe pump, peristaltic pump, progressive cavity pump? Each has different torque/speed/flow characteristics. | **Will be provided to team — specs TBD on receipt** |
 | Metal paste properties | Viscosity, particle size, working temperature, pot life. Drives pump selection and flow rate requirements. | **Get from paste supplier / datasheet** |
 | Target flow rate | Volume per second (mL/s or cc/min) needed for the application | **Depends on pump + paste + deposition geometry** |
 | Acceptable latency threshold | We estimate 5–20ms, but what is the *maximum* tolerable latency before deposition quality degrades? Paste is more forgiving than FDM filament. | **Engineering judgment + literature on paste dispensing** |
@@ -29,9 +29,9 @@ What data/information we **don't currently have** but need to complete each Phas
 
 | Need | What Specifically | Status |
 |------|-------------------|--------|
-| Stepper motor selection | **Motor not yet purchased.** Need to select based on pump torque requirements. Need: model number, rated voltage, rated current, holding torque, step angle, phase resistance, phase inductance, dimensions, shaft diameter. | **Select after pump is chosen** |
-| Pump torque requirement | How much torque does the pump need? Depends on pump type, paste viscosity, flow rate, back-pressure. | **Depends on pump selection + paste properties** |
-| Speed range | Min/max RPM for the stepper. Relates to pump flow rate and microstepping. | **Depends on pump + flow rate requirement** |
+| Stepper motor specs | **Motor will be provided to team.** Once received, document: model number, rated voltage, rated current, holding torque, step angle, phase resistance, phase inductance, dimensions, shaft diameter. | **Awaiting provided hardware** |
+| Pump torque requirement | How much torque does the pump need? Depends on pump type, paste viscosity, flow rate, back-pressure. | **Awaiting provided hardware — characterize on receipt** |
+| Speed range | Min/max RPM for the stepper. Relates to pump flow rate and microstepping. | **Awaiting provided hardware — characterize on receipt** |
 | Accuracy/precision targets | What positional/volumetric accuracy is needed for paste deposition? | **Engineering judgment based on deposition geometry** |
 | Coupling / gear ratio | How does the motor couple to the pump? Direct drive, geared, belt? | **Decide during mechanical design (Dawood)** |
 
@@ -85,7 +85,7 @@ What data/information we **don't currently have** but need to complete each Phas
 
 | Need | What Specifically | Source |
 |------|-------------------|--------|
-| Stepper motor current draw | **Motor not yet selected.** Will depend on pump torque requirements. TMC2209 board thermal limit is ~1.2A continuous with cooling. | **Select motor after pump is chosen** |
+| Stepper motor current draw | **Motor will be provided.** Document rated current on receipt. TMC2209 board thermal limit is ~1.2A continuous with cooling. | **Awaiting provided hardware** |
 | Pi model power draw | Depends on which Pi we use. Pi 4B: ~3W typical. Pi Zero 2W: ~1W typical. | **Check inventory / purchase** |
 | Measured SKR Pico idle draw | Documented as 50-80mA @ 24V, but verify once we have the board powered up. | **Measure in lab (Phase 3)** |
 
@@ -95,8 +95,8 @@ What data/information we **don't currently have** but need to complete each Phas
 
 | Need | What Specifically | Source |
 |------|-------------------|--------|
-| ~~Stepper motor — buy or on hand?~~ | **RESOLVED: Needs to be purchased.** Selection depends on pump choice. | **Answered** |
-| Pump — selection needed | What pump do we use? Must be compatible with metal paste. Stepper motor selection follows from this. | **Research pump types + purchase** |
+| ~~Stepper motor~~ | **RESOLVED: Will be provided to team.** Specs to be documented on receipt. | **Answered** |
+| ~~Pump~~ | **RESOLVED: Will be provided to team.** Specs to be documented on receipt. | **Answered** |
 | Pi model — buy or on hand? | Which non-Pi400 Pi do we have? If none, need to purchase (Pi 4B recommended). | **Check inventory** |
 | ~~BTT SKR Pico — confirm on hand~~ | **RESOLVED: On hand.** SKR Pico V1.0, product code 1060000513, date code 2025.1.10. | **Answered** |
 | MicroSD cards — quantity and size | At minimum 1 (for headless Pi). 2 if Pi400 also used. 32GB recommended. | **Design decision** |
@@ -114,7 +114,7 @@ What data/information we **don't currently have** but need to complete each Phas
 | Need | What Specifically | Source |
 |------|-------------------|--------|
 | UR30 end effector interface dimensions | Bolt pattern, flange diameter, mounting hole locations for the UR30 tool flange | **UR30 User Manual** — mechanical interface drawing |
-| Motor dimensions | Depends on motor selected. NEMA 17 is 31mm bolt spacing (standard), but motor not yet chosen. | **Select motor first** |
+| Motor dimensions | Depends on motor provided. NEMA 17 is 31mm bolt spacing (standard). | **Awaiting provided hardware** |
 | SKR Pico mounting holes | Board dimensions: 85 x 56mm, Pi-compatible mounting holes. See `tech_docs/BigTree Controller/skr_pico_v1_specs.md`. | **Documented** |
 | Pi mounting holes | Depends on Pi model selected. Pi 4B: 58x49mm hole pattern. | **Pi documentation** |
 | Available 3D printer specs | What printer does Prof. Pannier have? Print volume, material (PLA? PETG? ABS?), layer resolution? | **Ask Prof. Pannier** |
@@ -136,8 +136,8 @@ What data/information we **don't currently have** but need to complete each Phas
 
 | Need | What Specifically | Source |
 |------|-------------------|--------|
-| Pump back-pressure / torque requirement | Force/torque needed to drive the pump with metal paste at target flow rate. This is the key unknown for motor selection. | **Pump selection + paste viscosity data** |
-| Motor torque-speed curve | How torque drops off with RPM for our specific motor. | **Motor datasheet (motor not yet selected)** |
+| Pump back-pressure / torque requirement | Force/torque needed to drive the pump with metal paste at target flow rate. Characterize once hardware is received. | **Awaiting provided hardware** |
+| Motor torque-speed curve | How torque drops off with RPM for our specific motor. | **Motor datasheet — awaiting provided hardware** |
 | TMC2209 thermal limits on SKR Pico | Board thermal limit is ~0.8A without fan, ~1.2A with active cooling. See `tech_docs/BigTree Controller/skr_pico_v1_specs.md`. | **Documented — verify in lab** |
 | Microstepping decision | 16x (default) vs 32x vs 64x — affects resolution, max speed, and torque. | **Design decision after knowing speed/torque needs** |
 
@@ -150,17 +150,17 @@ These block multiple downstream tasks:
 | # | Unknown | Status | Blocks |
 |---|---------|--------|--------|
 | ~~1~~ | ~~What are we extruding?~~ | **RESOLVED: Metal paste via stepper-driven pump** | — |
-| 2 | **Which pump type?** | Open — syringe, peristaltic, progressive cavity? | Motor selection, torque analysis, mechanical design, BOM |
-| 3 | **Metal paste properties** | Open — viscosity, working temp, particle size | Pump selection, flow rate targets |
-| 4 | **Stepper motor selection** | Open — needs to be purchased after pump decision | Motor analysis, power budget, mount design, BOM |
+| ~~2~~ | ~~Which pump type?~~ | **RESOLVED: Will be provided to team** — specs TBD on receipt | — |
+| 3 | **Metal paste properties** | Open — viscosity, working temp, particle size | Flow rate targets, latency tolerance |
+| ~~4~~ | ~~Stepper motor selection~~ | **RESOLVED: Will be provided to team** — specs TBD on receipt | — |
 | 5 | **Which Pi model?** | Open — need to check inventory or purchase | Power budget, BOM, mount design, circuit layout |
 | ~~6~~ | ~~Budget~~ | **RESOLVED: Not a constraint** | — |
 | 7 | **Physical measurements from lab** | Open — cable lengths, mounting space, UR30 connectors | Circuit layout, BOM quantities, 3D print design |
 
 ### Suggested Order of Resolution
 
-1. **Research pump types for metal paste** — syringe pump is simplest, peristaltic is most common for viscous fluids. This is the biggest blocker.
-2. **Go to the lab** — check Pi inventory, measure cable distances, inspect UR30 connectors and mounting space, check paste properties
-3. **Select pump → select motor** — once pump torque requirements are known, pick a NEMA 17 motor that fits
-4. **Pick the Pi model** — Pi 4B is the safe choice (ethernet + USB + plenty of compute)
-5. **Search UMich supplier catalogs** — get part numbers for BOM once components are decided
+1. **Go to the lab** — check Pi inventory, measure cable distances, inspect UR30 connectors and mounting space, check paste properties
+2. **Pick the Pi model** — Pi 4B is the safe choice (ethernet + USB + plenty of compute)
+3. **Search UMich supplier catalogs** — get part numbers for BOM once components are decided
+4. **Receive pump + motor** — document specs, update power budget, torque analysis, and mount designs
+5. **Get metal paste datasheet** — viscosity, working temp, particle size from supplier

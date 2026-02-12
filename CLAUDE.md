@@ -27,12 +27,24 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 
 **Software stack:** Klipper (chosen over Lingua Franca — see `reqs/trade_lingua_franca_vs_klipper.md`). RTDE bridge daemon on Pi translates UR commands to Klipper G-code. `[manual_stepper]` config for single-axis control.
 
+## Task Tracking
+
+**Always check `todo.md` before starting work.** It tracks:
+- Bolton's 7-step design process progress
+- Phase 1–4 deliverables with accelerated schedule (target Mar 31)
+- Software development tasks (what's written, what's TODO, what needs hardware)
+- Source code index with file locations and status
+
 ## Repository Structure
 
-- `reqs/` — Project requirements, scope definition, phase deliverables, and design process methodology
-- `tech_docs/` — Technical documentation and manuals (UR30 User Manual, placeholders for BigTree Controller, Klipper, Pi400)
-- `init_docs/` — Pannier Review meeting notes and accelerated schedule PDF
+- `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
+- `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
+- `src/urscript/` — URScript programs for UR30 teach pendant
+- `reqs/` — Requirements, design process docs, trade studies, analysis
+- `tech_docs/` — Technical research (UR30, SKR Pico, Klipper, Pi400)
+- `init_docs/` — Meeting notes and source PDFs
 - `schedule.md` — Accelerated project schedule (target completion Mar 31, official submission Apr 24)
+- `todo.md` — Master task tracker
 
 ## Project Phases
 
@@ -51,9 +63,32 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 - **Pi (headless):** Raspberry Pi — runs Klipper host + Moonraker + RTDE bridge daemon (real-time control node)
 - **Pi400:** Raspberry Pi 400 — HMI, SSH terminal, web UI access (Mainsail/Fluidd), development. Not in the real-time loop.
 - **Microcontroller:** BigTreeTech SKR Pico V1.0 (RP2040-based, 4x TMC2209 soldered, Klipper-compatible, 85x56mm). Product code 1060000513. Full specs in `tech_docs/BigTree Controller/skr_pico_v1_specs.md`.
-- **Actuator:** Stepper motor (not yet selected — needs purchase) driving a pump for metal paste dispensing
+- **Actuator:** Stepper motor + pump — will be provided to the team (specs TBD on receipt)
 - **Power:** 24V from UR controller power block → buck converters → 5.1V for Pi; 24V direct to SKR Pico VIN
 - **RTDE library:** `ur_rtde` (SDU, C++ with Python bindings) — recommended over official UR Python client
+
+## Source Code
+
+| Component | Location |
+|-----------|----------|
+| Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` |
+| Bridge config (registers, constants) | `src/bridge/config.py` |
+| Klipper Unix socket client | `src/bridge/klipper_client.py` |
+| RTDE client wrapper | `src/bridge/rtde_client.py` |
+| Klipper printer config | `src/klipper/printer.cfg` |
+| URScript extrusion program | `src/urscript/extrusion_control.script` |
+
+## Design Documents
+
+| Topic | Location |
+|-------|----------|
+| Problem analysis (Bolton Step 2) | `reqs/problem_analysis.md` |
+| RTDE register allocation | `reqs/register_allocation.md` |
+| Latency analysis | `reqs/latency_analysis.md` |
+| Trade: Klipper vs Lingua Franca | `reqs/trade_lingua_franca_vs_klipper.md` |
+| Trade: Communication protocol | `reqs/trade_comms.md` |
+| Trade: MCU platform | `reqs/trade_mcu.md` |
+| Information needs tracker | `reqs/information_needs.md` |
 
 ## Research Documents
 
@@ -64,7 +99,6 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | SKR Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
 | UR RTDE protocol & latency | `tech_docs/UR30/ur_rtde_research.md` |
 | Power requirements | `tech_docs/Pi400/power_requirements.md` |
-| Lingua Franca vs Klipper trade | `reqs/trade_lingua_franca_vs_klipper.md` |
 
 ## Stretch Goals
 

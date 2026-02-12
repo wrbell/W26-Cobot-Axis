@@ -2,251 +2,224 @@
 
 ## Architecture
 
-Pi400 serves as HMI (SSH, web UI, development terminal) — not in the real-time control path. A headless Pi runs Klipper + RTDE bridge.
-
 ```
-                         ┌─── Pi400 (HMI / SSH / Mainsail web UI)
+                         ┌─── Pi400 (optional HMI / SSH / Mainsail web UI)
                          │
-UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Serial──▶  BTT Pico (RP2040)  ──▶  Stepper Motor
+UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Serial──▶  SKR Pico (RP2040)  ──▶  Stepper Motor  ──▶  Pump
 ```
 
-- [ ] **Decide which Pi model** for the headless control node (Pi 4B recommended for ethernet + USB; Pi Zero 2W is lower power but lacks wired ethernet)
+- [ ] **Decide which Pi model** for headless control node (Pi 4B recommended)
+- Pump and motor will be **provided to the team** — specs TBD on receipt
 
 ---
 
 ## Design Process (Bolton's 7 Steps)
 
-The course requires that we follow and document Bolton's 7-step design process (see `reqs/process.md`). The final report must explicitly relate our work to this process.
-
-### Step 1: The Need
-- [x] Identify the need — additional axis of motion for UR30 cobot, specifically extrusion control
+### Step 1: The Need — Complete
+- [x] Identify the need — UR30 lacks a native extrusion axis for metal paste dispensing
 - [x] Document in `reqs/initial_scope.md`
 
-### Step 2: Analysis of the Problem
-- [ ] **Write formal problem analysis** — define the true nature of the problem:
-  - What does the UR30 lack? (no native extrusion axis)
-  - What are the environmental constraints? (industrial cobot cell, 24V power, ethernet comms)
-  - What are the performance requirements? (latency, torque, speed range, precision)
-  - What failure modes matter? (loss of comms, stepper stall, power fault)
-- [ ] Document constraints: UR30 power budget (2A @ 24V), RTDE register limits, physical mounting space
+### Step 2: Analysis of the Problem — Complete
+- [x] Formal problem analysis → `reqs/problem_analysis.md`
+- [x] Latency analysis → `reqs/latency_analysis.md`
 
-### Step 3: Preparation of a Specification
-- [ ] **Write formal design specification** document covering:
-  - All required functions (receive commands, drive stepper, report status)
-  - Desirable features (Stallguard feedback, web UI monitoring)
-  - Mass, dimensions, mounting constraints
-  - Input/output requirements for each element
-  - Interface specifications (RTDE registers, USB serial, UART)
-  - Power requirements (reference `tech_docs/Pi400/power_requirements.md`)
-  - Operating environment (cobot cell, temperature, vibration)
-  - Accuracy and precision targets
-  - Relevant standards
+### Step 3: Preparation of a Specification — In Progress
+- [x] RTDE register allocation finalized → `reqs/register_allocation.md`
+- [ ] **Write formal design specification** — functions, interfaces, accuracy targets, operating environment
+- [ ] Pin assignment table
+- [ ] Power budget worksheet
 
-### Step 4: Generation of Possible Solutions
-- [x] Lingua Franca vs Klipper trade study → `reqs/trade_lingua_franca_vs_klipper.md`
-- [ ] **Location trade study** — end effector mount vs gantry vs base-mounted (per Pannier Review)
-- [ ] **Communication approach options** — document alternatives considered:
-  - RTDE (selected) vs Dashboard Server vs Primary/Secondary interfaces vs Modbus
-  - Reference `tech_docs/UR30/ur_rtde_research.md`
-- [ ] **MCU platform options** — document why BTT Pico was selected over alternatives (raw RP2040, Arduino, dedicated stepper controller)
+### Step 4: Generation of Possible Solutions — In Progress
+- [x] Lingua Franca vs Klipper → `reqs/trade_lingua_franca_vs_klipper.md` (Klipper: 4.70 vs 1.95)
+- [x] Communication protocol → `reqs/trade_comms.md` (RTDE: 4.85 vs next-best 3.30)
+- [x] MCU platform → `reqs/trade_mcu.md` (SKR Pico selected)
+- [ ] **Location trade study** — end effector vs base-mounted vs gantry (Dawood)
 
-### Step 5: Selection of a Suitable Solution
-- [x] Klipper selected (4.70 vs 1.95) — `reqs/trade_lingua_franca_vs_klipper.md`
-- [ ] **Document final architecture selection** with rationale for each component choice
-- [ ] **Present trade study to Prof. Pannier** — address Lingua Franca suggestion with documented rationale
+### Step 5: Selection of a Suitable Solution — Complete
+- [x] Klipper selected
+- [x] RTDE selected
+- [x] SKR Pico selected (on hand)
+- [x] Architecture documented in README and CLAUDE.md
+- [ ] **Present trade studies to Prof. Pannier** — address Lingua Franca suggestion
 
-### Step 6: Production of a Detailed Design
-- [ ] Covered by Phase 2 deliverables below (circuit diagrams, analysis, BOM)
+### Step 6: Production of a Detailed Design — In Progress
+- [ ] Circuit diagram (schematic)
+- [ ] Circuit layout (physical arrangement)
+- [ ] Block diagram of functions/signals
+- [ ] Bill of materials with purchasing instructions
+- [ ] Engineering analysis (motor loads, power budget)
+- [ ] 3D-printed component designs (Dawood)
 
-### Step 7: Production of Working Drawings
-- [ ] Final circuit diagrams (schematic + layout)
-- [ ] Final mechanical drawings / CAD for 3D-printed components
+### Step 7: Production of Working Drawings — Upcoming
+- [ ] Final circuit schematics
+- [ ] Final mechanical drawings / CAD
 - [ ] Wiring diagrams with pin assignments
-- [ ] System block diagram (functions and signals)
+- [ ] System block diagram
 
 ---
 
-## Phase 1: Ideation and Scope (Complete)
+## Phase 1: Ideation and Scope — Complete (Week 5)
 
 - [x] Team formation and role assignment
-  - Willem: Software/EE (RTDE comms, Klipper integration, firmware, electrical docs)
-  - Dawood: Mechanical (packaging, cabling, end effector, procurement)
-- [x] Project idea submitted — stepper motor driver as 7th axis for UR30
+- [x] Project idea submitted
 - [x] Scope defined — `reqs/initial_scope.md`
-- [x] Instructor go/no-go received — approved with feedback (see Pannier Review notes)
+- [x] Instructor go/no-go received
 
 ---
 
-## Phase 2: Design and Preliminary Analysis (In Progress)
+## Phase 2: Design and Preliminary Analysis — In Progress (Weeks 6–8, target Mar 1)
 
-**Deliverable:** Written memorandum (PDF, ≤5 pages) containing preliminary design, bill of materials, and analysis. Instructor responds with feedback and go/no-go.
+**Deliverable:** Written memo (PDF, ≤5 pages) with preliminary design, BOM, and analysis.
 
-### Required Diagrams (phase2.md)
-
-- [ ] **Block diagram of functions/signals** — show data flow: UR30 → RTDE → Pi → Klipper → BTT Pico → stepper, with feedback path
-- [ ] **Circuit diagram (schematic)** — UR30 power block → buck converters → Pi + Pi400 + BTT Pico → stepper driver → motor
-- [ ] **Circuit layout** — physical arrangement of components and connections
-- [ ] **Mechanical component sketches** — end effector mount, electronics packaging (hand sketches or CAD)
+### Required Diagrams
+- [ ] **Block diagram of functions/signals** — data flow with feedback path
+- [ ] **Circuit diagram (schematic)** — UR30 power → buck converters → Pi + SKR Pico → stepper
+- [ ] **Circuit layout** — physical arrangement
+- [ ] **Mechanical component sketches** (Dawood)
 
 ### Trade Studies
-
-- [x] Lingua Franca vs Klipper trade study → `reqs/trade_lingua_franca_vs_klipper.md` (Klipper recommended, 4.70 vs 1.95)
-- [ ] **Present trade study to Prof. Pannier** — address Lingua Franca suggestion with documented rationale
-- [ ] **Location trade study** — end effector mount vs other options (per Pannier Review)
+- [x] Lingua Franca vs Klipper → `reqs/trade_lingua_franca_vs_klipper.md`
+- [x] Communication protocol → `reqs/trade_comms.md`
+- [x] MCU platform → `reqs/trade_mcu.md`
+- [ ] **Location trade study** (Dawood)
+- [ ] **Present trade studies to Prof. Pannier**
 
 ### Electrical Documentation
-
-- [ ] **Pin assignment table** — which pins serve comms vs power vs signal, for each device
-- [ ] **Power budget worksheet** — reference `tech_docs/Pi400/power_requirements.md` (total ~1.1A typical @ 24V, fits UR30's 2A continuous)
-- [ ] **Select buck converters** — Pololu D24V22F5 (5.1V for Pi + Pi400), add to BOM
-- [ ] **Verify stepper motor specs** — get actual datasheet for the stepper we have, confirm voltage/current/torque
+- [ ] **Pin assignment table** — all devices
+- [ ] **Power budget worksheet**
+- [ ] **Select buck converters** — Pololu D24V22F5, add to BOM
 
 ### Bill of Materials
-
-- [ ] **Draft BOM** with UMich-contracted suppliers (DigiKey, Newark, Grainger, MSC Direct, BH Photo Video)
-- [ ] **Write purchasing instructions** — specific part numbers, quantities, and supplier for each item so instructor can order
-- [ ] Items likely needed:
-  - [ ] MicroSD cards (for Pi + Pi400)
-  - [ ] Gigabit network switch (UR30 ↔ Pi ↔ Pi400 ethernet)
-  - [ ] Buck converter(s) — 24V to 5.1V
-  - [ ] Cables (USB, ethernet, power)
-  - [ ] Fuse + TVS diode for power protection
-- [ ] Items on hand (verify):
-  - [ ] BigTreeTech Pico board
-  - [ ] Raspberry Pi 400
-  - [ ] Stepper motor
-  - [ ] Additional Raspberry Pi(s)
+- [ ] **Draft BOM** with UMich supplier part numbers
+- [ ] **Write purchasing instructions**
 
 ### 3D-Printed Components (Dawood)
-
-- [ ] **Identify which components need 3D printing** (phase2.md explicitly requires this)
-- [ ] **Provide design sketches** (hand or CAD) for each 3D-printed part
-- [ ] End effector mounting bracket
-- [ ] Electronics enclosure / mounting plate
-- [ ] Cable management clips/guides
-
-### CAD / Mechanical (Dawood)
-
-- [ ] End effector mounting design — sketches or CAD
-- [ ] Packaging concept for electronics
-- [ ] Cabling routing plan
+- [ ] Identify which components need 3D printing
+- [ ] Design sketches for each part
 
 ### Engineering Analysis
-
-- [ ] **Motor load calculations** — amperage required vs what the BTT Pico TMC2209 can supply (1.4A RMS max, 2.0A peak)
-- [ ] **Torque analysis** — compare stepper motor rated torque vs required torque for extrusion at target speeds
-- [ ] **Power budget analysis** — total system draw vs UR30 supply capacity, thermal considerations
-- [ ] **Latency analysis** — expected end-to-end latency through communication chain (reference `tech_docs/UR30/ur_rtde_research.md`)
+- [x] Latency analysis → `reqs/latency_analysis.md`
+- [x] Problem analysis → `reqs/problem_analysis.md`
+- [ ] **Motor load calculations** — pending hardware receipt
+- [ ] **Torque analysis** — pending hardware receipt
+- [ ] **Power budget analysis**
 
 ### Phase 2 Submission
-
-- [ ] **Compile Phase 2 PDF** (≤5 pages) containing:
-  - Block diagram, circuit diagram, circuit layout, mechanical sketches
-  - Bill of materials with purchasing instructions
-  - Engineering analysis (motor loads, power budget, latency)
-  - Trade study summary
-- [ ] **Have one team member edit entire document** for technical writing quality
-- [ ] **Submit to instructor** and await feedback + go/no-go decision
-- [ ] Use Microsoft Word via UMich Sharepoint/Office 365 (not Google Docs — figure resolution issues)
+- [ ] **Compile Phase 2 PDF** (≤5 pages)
+- [ ] **One team member edits entire document**
+- [ ] **Submit to instructor** — target Mar 1
+- [ ] Use Microsoft Word via UMich Office 365
 
 ---
 
-## Phase 3: Build and Additional Design/Analysis
+## Software Development — No Hardware Required
 
-### Build Tasks
+All software in `src/`. Can be developed and tested without physical hardware.
 
-#### Klipper Setup (Pi + BTT Pico)
-- [ ] **Flash Klipper firmware onto BTT Pico** — `make menuconfig` with RP2040 arch, W25Q080 flash, USB comms (see `tech_docs/BigTree Controller/bigtree_pico_klipper.md`)
-- [ ] **Install Klipper + Moonraker on Pi** (MainsailOS or manual install on headless Pi)
-- [ ] **Write minimal `printer.cfg`** using `[manual_stepper]` for single-axis control
-- [ ] **Test:** Send G-code from Pi, confirm stepper moves
-- [ ] **Configure TMC2209 UART** — set run_current, stealthchop threshold
-- [ ] **Set up Pi400 as HMI** — connect to same network, access Mainsail/Fluidd web UI, configure SSH to headless Pi
+### Bridge Daemon (`src/bridge/`)
 
-#### RTDE Bridge Daemon (Pi)
-- [ ] **Install `ur_rtde` library** on Pi (C++ with Python bindings, or pure Python fallback if ARM build issues)
-- [ ] **Write bridge daemon** that:
-  - Connects to UR30 via RTDE on port 30004
-  - Subscribes to relevant output registers (target TCP speed, digital outputs, general-purpose registers)
-  - Translates extrusion commands to Klipper G-code
-  - Sends commands to Klipper via Unix socket (`/tmp/klippy_uds`) — lowest latency path
-- [ ] **Define register allocation:** Map UR30 general-purpose registers to extrusion parameters (speed, enable, direction, etc.)
-- [ ] **Write corresponding URScript program** that writes extrusion commands to RTDE input registers
+#### Core — Written
+- [x] `config.py` — register mappings, connection defaults, constants
+- [x] `klipper_client.py` — klippy Unix socket client (connect, G-code, status query, stepper commands)
+- [x] `rtde_client.py` — ur_rtde wrapper with stub fallback for dev without robot
+- [x] `bridge_daemon.py` — main loop: RTDE read → translate → Klipper command → status writeback
+- [x] `__main__.py` — entry point for `python -m bridge`
+- [x] Register allocation implemented matching `reqs/register_allocation.md`
+- [x] E-stop, homing, enable/disable, mode switching
+- [x] Reconnection logic for dropped RTDE or Klipper connections
+- [x] `--dry-run` mode for testing without Klipper
 
-#### Bidirectional Feedback
-- [ ] **Implement status feedback** from Klipper → RTDE bridge → UR30
-  - Stepper position/velocity via Klipper object subscriptions
-  - Fault/error status
+#### Enhancements — TODO
+- [ ] **Add Klipper status subscription** — read `motion_report.live_extruder_velocity` for actual rate feedback (currently reports commanded rate)
+- [ ] **Speed-proportional extrusion mode** — bridge computes rate from TCP speed × multiplier instead of using UR30-computed rate
+- [ ] **Add data logging** — log commanded vs actual rates, timestamps, latency measurements to CSV for Phase 4 analysis
+- [ ] **Watchdog timer** — detect if RTDE stops updating (UR30 program paused/stopped) and auto-disable stepper
+- [ ] **Configurable extrusion profiles** — support non-linear rate mapping (e.g., lookup table, polynomial)
+- [ ] **Add Dashboard Server client** — connect to UR30 port 29999 for robot lifecycle management (program start/stop, mode query)
 
-#### Mechanical Assembly (Dawood)
+#### Testing — TODO
+- [ ] **Unit tests for `klipper_client.py`** — mock Unix socket, test JSON protocol, error handling
+- [ ] **Unit tests for `rtde_client.py`** — test stub mode, register read/write
+- [ ] **Unit tests for `bridge_daemon.py`** — test command translation, e-stop, mode switching, reconnection
+- [ ] **Set up URSim** — UR simulator (Docker) for RTDE integration testing without physical robot
+- [ ] **Integration test: bridge + URSim** — verify register read/write, mode transitions, fault injection
+
+### Klipper Configuration (`src/klipper/`)
+- [x] `printer.cfg` — SKR Pico config with `[manual_stepper pump]`, TMC2209 UART, E-axis driver
+- [ ] **Write `moonraker.conf`** — Moonraker API config (port 7125, trusted clients, CORS)
+- [ ] **Write `mainsail.conf`** or equivalent — web UI config for monitoring (optional, for Pi400 HMI)
+
+### URScript (`src/urscript/`)
+- [x] `extrusion_control.script` — helper functions, speed-sync extrusion, retraction, fault checking
+- [ ] **Write test program** — simple linear move with extrusion for initial validation
+- [ ] **Write calibration program** — dispense known volume, measure actual vs commanded for pump characterization
+
+### Deployment
+- [ ] **Write `requirements.txt`** — Python dependencies (ur-rtde, etc.)
+- [ ] **Write systemd service file** — auto-start bridge daemon on Pi boot
+- [ ] **Write deployment script** — install deps, copy configs, set up Klipper, flash firmware
+- [ ] **Write setup instructions** — step-by-step for reproducing the full software stack on a fresh Pi
+
+---
+
+## Phase 3: Build and Additional Design/Analysis (Weeks 9–11, Mar 2–22)
+
+### Hardware Setup (requires hardware)
+- [ ] **Flash Klipper firmware onto SKR Pico** — `make menuconfig` RP2040, W25Q080, USB
+- [ ] **Install Klipper + Moonraker on Pi** (MainsailOS or manual)
+- [ ] **Deploy `printer.cfg`** to Pi
+- [ ] **Test:** send G-code from Pi, confirm stepper moves
+- [ ] **Tune TMC2209** — run_current based on actual motor specs, StealthChop threshold
+- [ ] **Set up Pi400 as HMI** — same network, Mainsail web UI, SSH
+
+### Integration (requires hardware)
+- [ ] **Deploy bridge daemon to Pi** — install deps, test with UR30
+- [ ] **Deploy URScript to UR30** — load via teach pendant or SSH
+- [ ] **End-to-end smoke test** — UR30 sends extrude command → stepper moves
+- [ ] **Tune extrusion multiplier** — calibrate mm extruded per mm/s TCP speed
+- [ ] **Tune Klipper accel/velocity limits** — match pump mechanical capabilities
+
+### Mechanical Assembly (Dawood)
 - [ ] 3D print mounting components
 - [ ] Assemble electronics onto mounting hardware
 - [ ] Route and secure cabling
 - [ ] Mount to end effector / robot
 
-### Additional Design/Analysis (expected per about.md)
-- [ ] Revisit and refine any design elements based on build experience
-- [ ] Update circuit diagrams if build deviates from Phase 2 design
-- [ ] Document any design changes with rationale
-
 ### Phase 3 Deliverable
-- [ ] **Write progress update memorandum** to instructor (required during this phase per `reqs/about.md`)
+- [ ] **Write progress update memorandum** to instructor
 
 ---
 
-## Phase 4: Test and Reporting
+## Phase 4: Test and Reporting (Weeks 12–13, Mar 23 – Apr 5)
 
-### System Testing
-- [ ] **End-to-end functional test** — UR30 sends extrusion command → stepper moves at correct speed
-- [ ] **Latency characterization** — measure actual end-to-end latency (estimated 5–20ms)
-- [ ] **Accuracy test** — commanded vs actual stepper position/speed
+### System Testing (target: complete by Mar 31)
+- [ ] **End-to-end functional test** — UR30 → stepper at correct speed
+- [ ] **Latency characterization** — oscilloscope on step pin, measure actual latency
+- [ ] **Accuracy test** — commanded vs actual speed/position
 - [ ] **Fault handling test** — loss of comms, stepper stall, power interruption
-- [ ] **Endurance test** — run for extended period, check for thermal or reliability issues
+- [ ] **Endurance test** — extended run, check thermal / reliability
 - [ ] Document test procedures and results with data
 
-### Stretch Goals (Test if Time Permits)
-- [ ] **Stallguard torque feedback** — BTT Pico TMC2209 Stallguard4 via DIAG pins → Klipper `register_remote_method` → RTDE → URScript
-- [ ] **G-code timeshifting** — if latency is predictable, use Klipper's ~100ms lookahead buffer
-- [ ] **URCap** for teach pendant UI (Java SDK, not needed for MVP)
+### Stretch Goals (if time permits)
+- [ ] **StallGuard torque feedback** — TMC2209 DIAG → Klipper → RTDE → URScript
+- [ ] **G-code timeshifting** — compensate Klipper lookahead buffer latency
+- [ ] **URCap** for teach pendant UI (Java SDK)
 
-### Final Report (Due Thu Apr 23, 2026)
+### Final Report (Due Apr 23)
+- [ ] **Write final report** (PDF, ≤2000 words)
+- [ ] **Map to Bolton's 7-step design process**
+- [ ] **Relate to course topics** — control systems, circuits, actuators, microcontrollers, system models
+- [ ] **Team member work listing**
+- [ ] **Figures and tables**
+- [ ] **References and citations**
+- [ ] **Use Word Styles** via UMich Office 365
+- [ ] **One team member edits entire report**
+- [ ] **Attach supplementary materials** — code, drawings
 
-**Requirements from `reqs/phase3.md`:**
-
-- [ ] **Write final report** (PDF, ≤2000 words — figures/tables don't count toward limit)
-- [ ] **Relate work to course topics:** design process, control systems, system diagrams, sensors, signal conditioners, circuits, electrical actuators, microcontrollers, system models
-- [ ] **Map to Bolton's 7-step design process** — show how each step was addressed
-- [ ] **Include team member work listing** — who did what
-- [ ] **Figures and tables** — use liberally to convey ideas (don't count toward word limit)
-- [ ] **References and in-text citations**
-- [ ] **Use Word Styles** (headings, caption styles) — use Microsoft Word via UMich Office 365
-- [ ] **One team member edits entire report** for technical writing before submission
-- [ ] **Attach supplementary materials:** drawings, computer code in native formats, preliminary design
-
-### Oral Presentation (Final Exam Slot — Apr 24, 2026, 6:30–9:30 PM)
-
-- [ ] **Prepare presentation** — brief overview and demonstration of prototype
-- [ ] **Practice design defense** — prepare to answer technical questions about design choices and performance
-- [ ] **Prepare prototype for demonstration**
-
----
-
-## Open Investigation Items
-
-- [ ] **Network switch selection** — any gigabit switch works, but verify UR30 controller ethernet port availability
-- [ ] **UR communication protocol deep-dive** — RTDE is primary, but evaluate if Dashboard Server (port 29999) is useful for supplementary control (program start/stop/pause)
-- [ ] **Klipper forking** — may be needed if we want custom Stallguard data passthrough beyond what stock Klipper provides. Evaluate after basic chain works.
-
----
-
-## Learning / Ramp-Up Tasks (from Pannier Review)
-
-- [ ] Get familiar with Linux/Bash — [Ubuntu CLI tutorial](https://ubuntu.com/tutorials/command-line-for-beginners#1-overview)
-- [ ] Get familiar with Raspberry Pi — [Pi getting started guide](https://www.raspberrypi.com/documentation/computers/getting-started.html)
-- [ ] Get familiar with URScript & RTDE — reference `tech_docs/UR30/ur_rtde_research.md`
-- [ ] Get familiar with Klipper — [klipper3d.org](https://www.klipper3d.org/) + `tech_docs/Klipper/klipper_protocols.md`
-- [ ] Get familiar with stepper motor driving — [Adafruit RP2040 motor guide](https://learn.adafruit.com/use-dc-stepper-servo-motor-solenoid-rp2040-pico/overview) (reference only, not our approach)
-- [ ] Review RP2040 hardware design — [RP2040 datasheet](https://datasheets.raspberrypi.com/rp2040/hardware-design-with-rp2040.pdf)
+### Oral Presentation (Apr 24, 6:30–9:30 PM)
+- [ ] Prepare presentation
+- [ ] Practice design defense
+- [ ] Prepare prototype for demonstration
 
 ---
 
@@ -254,14 +227,31 @@ The course requires that we follow and document Bolton's 7-step design process (
 
 | Document | Location |
 |----------|----------|
+| Problem analysis (Bolton Step 2) | `reqs/problem_analysis.md` |
+| RTDE register allocation | `reqs/register_allocation.md` |
+| Latency analysis | `reqs/latency_analysis.md` |
+| Trade: Klipper vs Lingua Franca | `reqs/trade_lingua_franca_vs_klipper.md` |
+| Trade: Communication protocol | `reqs/trade_comms.md` |
+| Trade: MCU platform | `reqs/trade_mcu.md` |
+| Information needs tracker | `reqs/information_needs.md` |
 | Klipper protocols & API | `tech_docs/Klipper/klipper_protocols.md` |
-| BigTree Pico + Klipper | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
+| SKR Pico V1.0 specs | `tech_docs/BigTree Controller/skr_pico_v1_specs.md` |
+| SKR Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
 | UR RTDE research | `tech_docs/UR30/ur_rtde_research.md` |
 | Power requirements | `tech_docs/Pi400/power_requirements.md` |
-| Lingua Franca vs Klipper trade | `reqs/trade_lingua_franca_vs_klipper.md` |
-| Accelerated schedule | `schedule.md` |
 | Design process | `reqs/process.md` |
 | Phase 2 requirements | `reqs/phase2.md` |
 | Phase 3/4 requirements | `reqs/phase3.md` |
 | Project overview | `reqs/about.md` |
-| Initial scope | `reqs/initial_scope.md` |
+| Accelerated schedule | `schedule.md` |
+
+## Source Code Index
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` | Written |
+| Bridge config (registers, constants) | `src/bridge/config.py` | Written |
+| Klipper Unix socket client | `src/bridge/klipper_client.py` | Written |
+| RTDE client wrapper | `src/bridge/rtde_client.py` | Written |
+| Klipper printer config | `src/klipper/printer.cfg` | Written |
+| URScript extrusion program | `src/urscript/extrusion_control.script` | Written |
