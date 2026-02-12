@@ -175,6 +175,7 @@ All software features are being designed before implementation. Design docs in `
 - [x] **Phase 2 memo outline** → `docs/design/phase2_memo_outline.md`
 - [x] **Final report outline** → `docs/design/final_report_outline.md`
 - [x] **Update `docs/pi_power.md`** — fixed stale dual-Pi architecture references
+- [x] **Stepper driving design** → `docs/design/stepper_driving.md` — consolidated justification for manual_stepper, TMC2209 config, step generation pipeline, calibration
 
 ---
 
