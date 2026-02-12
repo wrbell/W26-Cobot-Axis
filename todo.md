@@ -91,7 +91,7 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [x] **Select buck converters** — Pololu D24V22F5 selected → `docs/phase2/buck_converter.md`
 
 ### Bill of Materials
-- [x] **Draft BOM** with DigiKey/Newark part numbers → `docs/phase2/bom.md` (~$128 total, 28 items)
+- [x] **Draft BOM** with DigiKey/Newark part numbers → `docs/phase2/bom.md` (~$183 total, 28 items, most P/Ns verified)
 - [x] **Write purchasing instructions** — included in `docs/phase2/bom.md`
 
 ### 3D-Printed Components (Dawood)
@@ -109,7 +109,7 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [x] **Memo text draft** — all 8 sections (~1,400 words) → `docs/phase2/memo_draft.md`
 - [ ] Redraw block diagram in draw.io/Visio (from `docs/phase2/block_diagram.md`)
 - [ ] Redraw circuit schematic in KiCad/draw.io (from `docs/phase2/circuit_schematic.md`)
-- [ ] Verify DigiKey/Newark part numbers and stock
+- [x] Verify DigiKey/Newark part numbers and stock — 10 of 14 verified/corrected; 2 unverified (MicroSD, USB cable), 2 need final check (wire spools, screw terminals)
 - [ ] Dawood: write Section 5 (mechanical concept) + Figures 3–4
 
 ### Phase 2 Submission

@@ -104,7 +104,7 @@ The stepper motor and pump assembly mount at or near the UR30's end effector. A 
 
 ## Section 7: Bill of Materials (~100 words) + Table 4
 
-Table 4 lists all components required for the system. The total estimated cost for purchasable items is approximately $128, excluding items already on hand (SKR Pico, Pi 400) and those provided by the instructor (stepper motor, pump).
+Table 4 lists all components required for the system. The total estimated cost for purchasable items is approximately $183, excluding items already on hand (SKR Pico, Pi 400) and those provided by the instructor (stepper motor, pump).
 
 Components should be ordered from UMich-contracted suppliers (DigiKey, Newark). Before ordering, we recommend checking the ME472 lab inventory for the Raspberry Pi, Ethernet switch, and cables, which may already be available. 3D-printed components (electronics enclosure, motor mount, cable clips) will be fabricated using the instructor's printer; Dawood will provide designs once the motor and pump dimensions are known.
 
@@ -166,13 +166,13 @@ See `docs/phase2/bom.md` for the full BOM with part numbers. Summary:
 
 | Category | Items | Est. Cost |
 |----------|-------|-----------|
-| Electronics (Pi, buck converter, switch, cables) | 7 | $91.34 |
-| Protection and passives (fuse, TVS, caps, polyfuse) | 6 | $6.65 |
+| Electronics (Pi, buck converter, switch, cables) | 7 | $148.79 |
+| Protection and passives (fuse, TVS, caps, polyfuse) | 6 | $3.65 |
 | Wiring and connectors | 7 | $30.45 |
 | On hand (SKR Pico, Pi 400, PSU) | 3 | $0.00 |
 | Provided by instructor (motor, pump) | 2 | $0.00 |
 | 3D-printed (enclosure, mount, clips) | 3 | $0.00 |
-| **Total** | **28** | **~$128** |
+| **Total** | **28** | **~$183** |
 
 ### Table 5: Pin Assignment Summary
 
