@@ -4,23 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-University capstone project (ME472 - Mechatronics) to develop a stepper motor driver that takes commands from a Universal Robots UR30 controller to function as an additional (7th) axis of motion. The stepper motor provides extrusion control.
+University capstone project (ME472 - Mechatronics) to develop a stepper motor driver that takes commands from a Universal Robots UR30 controller to function as an additional (7th) axis of motion. The stepper motor drives a pump for **metal paste dispensing/extrusion** (pump type TBD — syringe, peristaltic, or progressive cavity).
 
 **System architecture:**
 ```
                               ┌─── Pi400 (HMI / SSH / monitoring)
                               │       (development terminal, not in real-time loop)
                               │
-UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Serial──▶  BTT Pico (RP2040)  ──▶  Stepper Motor
-     (URScript)              (gigabit switch)                                  (Klipper MCU)         (extrusion)
+UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Serial──▶  SKR Pico (RP2040)  ──▶  Stepper Motor  ──▶  Pump
+     (URScript)              (gigabit switch)                                  (Klipper MCU)         (metal paste dispensing)
 ```
 
 **Communication chain:**
 - UR30 ↔ Pi: RTDE over TCP/IP on port 30004 (ethernet, needs a gigabit switch)
 - Pi → Klipper: Unix socket (`/tmp/klippy_uds`) — lowest latency path
-- Pi ↔ BTT Pico: USB serial (Klipper's native MCU protocol)
-- BTT Pico → Stepper: TMC2209 drivers (StealthChop/SpreadCycle)
-- Pi400: sits on the same network for SSH access, Moonraker/Mainsail web UI, development, and monitoring — not in the real-time control path
+- Pi ↔ SKR Pico: USB serial (Klipper's native MCU protocol)
+- SKR Pico → Stepper: TMC2209 drivers (StealthChop/SpreadCycle)
+- Pi400: **optional** — sits on the same network for SSH access, Moonraker/Mainsail web UI, development, and monitoring. System must run standalone without it (UR30 → Pi → SKR Pico → stepper).
 - Estimated end-to-end latency: 5–20ms typical
 
 **Power:** 5.1V + 24V from UR controller power block (2A continuous, 3.5A burst). Total draw ~1.1A typical @ 24V.
@@ -50,9 +50,9 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 - **Robot:** Universal Robots UR30 (6-axis collaborative robot)
 - **Pi (headless):** Raspberry Pi — runs Klipper host + Moonraker + RTDE bridge daemon (real-time control node)
 - **Pi400:** Raspberry Pi 400 — HMI, SSH terminal, web UI access (Mainsail/Fluidd), development. Not in the real-time loop.
-- **Microcontroller:** BTT Pico (RP2040-based, 4x TMC2209 drivers, Klipper-compatible)
-- **Actuator:** Stepper motor (~24V, NEMA 17 class) for extrusion control
-- **Power:** 24V from UR controller power block → buck converters → 5.1V for Pi + Pi400; 24V direct to BTT Pico VIN
+- **Microcontroller:** BigTreeTech SKR Pico V1.0 (RP2040-based, 4x TMC2209 soldered, Klipper-compatible, 85x56mm). Product code 1060000513. Full specs in `tech_docs/BigTree Controller/skr_pico_v1_specs.md`.
+- **Actuator:** Stepper motor (not yet selected — needs purchase) driving a pump for metal paste dispensing
+- **Power:** 24V from UR controller power block → buck converters → 5.1V for Pi; 24V direct to SKR Pico VIN
 - **RTDE library:** `ur_rtde` (SDU, C++ with Python bindings) — recommended over official UR Python client
 
 ## Research Documents
@@ -60,7 +60,8 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | Topic | Location |
 |-------|----------|
 | Klipper protocols & API | `tech_docs/Klipper/klipper_protocols.md` |
-| BTT Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
+| SKR Pico V1.0 hardware specs | `tech_docs/BigTree Controller/skr_pico_v1_specs.md` |
+| SKR Pico + Klipper setup | `tech_docs/BigTree Controller/bigtree_pico_klipper.md` |
 | UR RTDE protocol & latency | `tech_docs/UR30/ur_rtde_research.md` |
 | Power requirements | `tech_docs/Pi400/power_requirements.md` |
 | Lingua Franca vs Klipper trade | `reqs/trade_lingua_franca_vs_klipper.md` |
