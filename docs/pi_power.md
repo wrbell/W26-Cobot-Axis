@@ -7,9 +7,10 @@ for every device in the signal chain, all powered from the UR30 controller's 24V
 
 **Signal chain:**
 ```
-UR30 Controller 24V  -->  Buck to 5V  -->  Pi 400 (Klipper host)
-                     -->  Buck to 5V  -->  Slave Pi (comms bridge)
-                     -->  24V direct  -->  BTT Pico (onboard reg + VMOT)  -->  Stepper motor
+UR30 Controller 24V  -->  Buck to 5.1V  -->  Pi (Klipper host + RTDE bridge)
+                     -->  24V direct    -->  BTT Pico (onboard reg + VMOT)  -->  Stepper motor
+
+Pi400 (optional HMI) sits on the same network for SSH/web UI -- not powered from UR30.
 ```
 
 **Last updated:** 2026-02-12
@@ -19,8 +20,8 @@ UR30 Controller 24V  -->  Buck to 5V  -->  Pi 400 (Klipper host)
 ## Table of Contents
 
 1. [UR30 Controller -- 24V Power Source](#1-ur30-controller--24v-power-source)
-2. [Raspberry Pi 400 -- Klipper Host](#2-raspberry-pi-400--klipper-host)
-3. [Slave Raspberry Pi -- Comms Bridge](#3-slave-raspberry-pi--comms-bridge)
+2. [Raspberry Pi -- Klipper Host + RTDE Bridge](#2-raspberry-pi--klipper-host--rtde-bridge)
+3. [Raspberry Pi 400 -- Optional HMI Terminal](#3-raspberry-pi-400--optional-hmi-terminal)
 4. [BigTreeTech Pico (BTT Pico) -- Stepper Controller](#4-bigtreetech-pico-btt-pico--stepper-controller)
 5. [NEMA 17 Stepper Motor -- Actuator](#5-nema-17-stepper-motor--actuator)
 6. [Power Distribution Design](#6-power-distribution-design)
@@ -96,7 +97,7 @@ The tool flange is limited to 600 mA typical (2 A peak burst only) which is insu
 for the stepper motor alone. The Controller Box internal supply provides 2 A continuous,
 and if needed the external input option raises this to 6 A.
 
-Our total system draw is estimated at ~2.5 A (see Section 7). Two options:
+Our total system draw is estimated at ~1.0-1.4 A (see Section 7). Two options:
 
 - **Option A (simpler):** Use the internal 24V, accept that brief stepper acceleration
   peaks may approach the 2 A limit. The 3.5 A burst rating at 33% duty gives headroom.
@@ -105,11 +106,13 @@ Our total system draw is estimated at ~2.5 A (see Section 7). Two options:
 
 ---
 
-## 2. Raspberry Pi 400 -- Klipper Host
+## 2. Raspberry Pi -- Klipper Host + RTDE Bridge
 
-The Pi 400 is a Raspberry Pi 4-class SoC (BCM2711, quad-core Cortex-A72 @ 1.8 GHz)
-built into a keyboard form factor. It serves as the Klipper host, receives RTDE commands
-from the UR30 over Ethernet, and forwards motion commands to the slave Pi.
+A single headless Raspberry Pi (Pi 4-class, BCM2711, quad-core Cortex-A72) serves as
+the real-time control node: it runs the Klipper host (klippy), the RTDE bridge daemon,
+and Moonraker. It receives RTDE commands from the UR30 over Ethernet and sends G-code
+to the SKR Pico over USB serial. This Pi must be powered from the UR30's 24V supply
+via a buck converter.
 
 ### 2.1 Power Input Specifications
 
@@ -119,7 +122,7 @@ from the UR30 over Ethernet, and forwards motion commands to the slave Pi.
 | Recommended PSU | 5.1 V / 3.0 A (15.3 W) | Official Raspberry Pi USB-C PSU |
 | Minimum supply current | 3.0 A | Required for stable operation |
 | Absolute min voltage | 4.63 V | Below this the PMIC triggers under-voltage warning |
-| Typical idle current draw | ~600 mA | Desktop idle, no peripherals |
+| Typical idle current draw | ~600 mA | Headless idle, no peripherals |
 | Typical load current draw | ~1.0-1.2 A | CPU stress, Ethernet active |
 | Peak current draw | ~1.4 A | All cores loaded + USB peripherals |
 | Power via GPIO header (pin 2/4) | 5V | Bypasses USB-C PD negotiation; **no polyfuse protection** |
@@ -135,13 +138,13 @@ from the UR30 over Ethernet, and forwards motion commands to the slave Pi.
 | GPIO input low threshold | ~0.8 V |
 | Max GPIO source/sink current per pin | 16 mA (default drive strength) |
 | Total GPIO current (all pins) | 50 mA max recommended |
-| GPIO pin count | 40-pin header (same as Pi 4B) |
+| GPIO pin count | 40-pin header |
 | 5V pins (pin 2, 4) | Connected directly to 5V rail |
 | 3.3V pin (pin 1, 17) | From onboard 3.3V regulator, 50 mA available externally |
 
 ### 2.3 Power Input via GPIO Header (Relevant for This Project)
 
-The Pi 400 can be powered through GPIO pins 2 or 4 (5V) and pin 6 (GND) instead of
+The Pi can be powered through GPIO pins 2 or 4 (5V) and pin 6 (GND) instead of
 USB-C. This is the likely method when powering from the UR30 via a buck converter:
 
 **Advantages:**
@@ -157,80 +160,49 @@ USB-C. This is the likely method when powering from the UR30 via a buck converte
   below ~4.63 V
 - Add a Schottky diode or ideal-diode circuit if back-powering protection is needed
 
-### 2.4 Notes for Klipper Host Role
+### 2.4 Notes for Klipper Host + RTDE Bridge Role
 
-- Klipper host process (klippy) is CPU-light on the Pi; typical CPU use is <10%
+- Klipper host process (klippy) is CPU-light; typical CPU use is <10%
+- RTDE bridge daemon adds minimal load (Python, event-driven)
 - Ethernet is the primary data path (RTDE from UR30); draws ~0.2 A additional
-- No GPU load expected; no HDMI output needed during operation
-- **Design current for Pi 400: 1.5 A at 5.1 V (7.65 W)** -- includes safety margin
+- USB serial to SKR Pico for Klipper MCU communication
+- No GPU load expected; headless operation, no HDMI output needed
+- **Design current for Pi: 1.5 A at 5.1 V (7.65 W)** -- includes safety margin
 
 ### 2.5 Reference
 
-- Raspberry Pi 400 product brief: https://datasheets.raspberrypi.com/pi400/pi400-product-brief.pdf
+- Pi 4B datasheet: https://datasheets.raspberrypi.com/rpi4/raspberry-pi-4-datasheet.pdf
 - BCM2711 datasheet: https://datasheets.raspberrypi.com/bcm2711/bcm2711-peripherals.pdf
 - Raspberry Pi hardware documentation: https://www.raspberrypi.com/documentation/computers/raspberry-pi.html
 
 ---
 
-## 3. Slave Raspberry Pi -- Comms Bridge
+## 3. Raspberry Pi 400 -- Optional HMI Terminal
 
-The slave Pi bridges Klipper serial communication to the BTT Pico. Two candidate
-boards are evaluated: **Pi 4 Model B** and **Pi Zero 2 W**.
+The Pi 400 is a Raspberry Pi 4-class SoC (BCM2711, quad-core Cortex-A72 @ 1.8 GHz)
+built into a keyboard form factor. It sits on the same network as the control Pi and
+is used for SSH access, Mainsail/Fluidd web UI, development, and monitoring. It is
+**not** in the real-time control loop and does **not** need to be powered from the
+UR30 -- it uses its own standard USB-C power supply.
 
-### 3.1 Option A: Raspberry Pi 4 Model B
-
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| SoC | BCM2711, quad Cortex-A72 @ 1.5 GHz | Same family as Pi 400 |
-| Input voltage (USB-C) | 5.1 V DC | |
-| Recommended PSU | 5.1 V / 3.0 A | Official recommendation |
-| Idle current draw | ~600 mA | No peripherals |
-| Typical load current | ~900 mA-1.2 A | Network + serial active |
-| Peak current draw | ~1.4 A | Full CPU load |
-| GPIO logic | 3.3 V LVCMOS | Same as Pi 400 |
-| GPIO power via header | Same as Pi 400 (pins 2/4 = 5V) | Same cautions apply |
-| RAM options | 1/2/4/8 GB LPDDR4 | Any variant works |
-
-**Pros:** Same architecture as Pi 400; easy cross-development. Full Ethernet (Gigabit).
-**Cons:** Overkill for a serial bridge. Higher power draw than needed.
-
-**Design current for Pi 4B: 1.5 A at 5.1 V (7.65 W)**
-
-### 3.2 Option B: Raspberry Pi Zero 2 W (Recommended)
+### 3.1 Power Specifications (for reference only)
 
 | Parameter | Value | Notes |
 |-----------|-------|-------|
-| SoC | RP3A0, quad Cortex-A53 @ 1.0 GHz | BCM2710A1-based |
-| Input voltage (micro-USB) | 5.0-5.25 V DC | |
-| Recommended PSU | 5.1 V / 2.5 A | Official recommendation |
-| Idle current draw | ~100 mA | Headless, no WiFi |
-| Typical load current | ~200-350 mA | Serial comms active |
-| Peak current draw | ~500 mA | All cores loaded + WiFi |
-| WiFi current draw | ~40-80 mA | When actively transmitting |
+| Input voltage (USB-C) | 5.1 V DC | Standard Raspberry Pi USB-C PSU |
+| Recommended PSU | 5.1 V / 3.0 A (15.3 W) | Official Raspberry Pi USB-C PSU |
+| Typical load current draw | ~1.0-1.2 A | Desktop use, Ethernet active |
 | GPIO logic | 3.3 V LVCMOS | Same as all Pi models |
-| GPIO power via header | Pin 2 = 5V, Pin 6 = GND | Same cautions as Pi 400 |
-| RAM | 512 MB LPDDR2 | Sufficient for Klipper MCU bridge |
 
-**Pros:** Much lower power (~0.35 A vs ~1.2 A). Physically smaller. Adequate for
-serial bridging. Runs Klipper MCU process fine.
-**Cons:** No wired Ethernet (WiFi or USB-Ethernet adapter needed for network comms
-to Pi 400). Micro-USB instead of USB-C. Only 512 MB RAM (sufficient for this use).
+The Pi 400 is **not included in the UR30 power budget** since it is powered
+independently. It can be removed from the setup entirely without affecting the
+real-time control chain (UR30 -> Pi -> SKR Pico -> stepper).
 
-**Design current for Pi Zero 2 W: 0.5 A at 5.1 V (2.55 W)**
+### 3.2 References
 
-### 3.3 Recommendation
-
-**Pi Zero 2 W is strongly recommended** for the slave role. The serial bridge to the
-BTT Pico requires minimal compute, and the power savings (1.0 A less) are significant
-when operating from the UR30's limited 24V budget. If wired Ethernet is required
-between the Pi 400 and the slave Pi, a USB-to-Ethernet adapter can be used, or they
-can communicate over USB serial directly.
-
-### 3.4 References
-
-- Pi 4B datasheet: https://datasheets.raspberrypi.com/rpi4/raspberry-pi-4-datasheet.pdf
-- Pi Zero 2 W datasheet: https://datasheets.raspberrypi.com/rpizero2/raspberry-pi-zero-2-w-product-brief.pdf
-- Pi hardware docs: https://www.raspberrypi.com/documentation/computers/raspberry-pi.html
+- Raspberry Pi 400 product brief: https://datasheets.raspberrypi.com/pi400/pi400-product-brief.pdf
+- BCM2711 datasheet: https://datasheets.raspberrypi.com/bcm2711/bcm2711-peripherals.pdf
+- Raspberry Pi hardware documentation: https://www.raspberrypi.com/documentation/computers/raspberry-pi.html
 
 ---
 
@@ -388,35 +360,36 @@ Peak (acceleration): up to ~1.5 A briefly.
                     PWR (+24V) ---- GND (0V)
                          |              |
                     +----+----+---------+----+
-                    |         |              |
-               [Buck #1]  [Buck #2]    [Direct 24V]
-              24V -> 5.1V  24V -> 5.1V       |
-                    |         |              |
-               Pi 400     Slave Pi      BTT Pico VIN
-             (Klipper    (Serial         (VMOT + onboard
-              host)      bridge)          5V/3.3V reg)
-                                              |
-                                         TMC2209 driver
-                                              |
-                                        NEMA 17 stepper
+                    |                        |
+               [Buck #1]               [Direct 24V]
+              24V -> 5.1V                    |
+                    |                        |
+                   Pi                   BTT Pico VIN
+             (Klipper host              (VMOT + onboard
+            + RTDE bridge)               5V/3.3V reg)
+                    |                        |
+               [USB serial]            TMC2209 driver
+                    |                        |
+               BTT Pico               NEMA 17 stepper
+
+   Pi400 (optional HMI) -- powered independently, not shown in power chain
 ```
 
 ### 6.2 Buck Converter: 24V to 5V
 
-Each Raspberry Pi requires a dedicated 5V regulated supply. A buck (step-down)
-switching converter is the correct topology for 24V-to-5V conversion due to the high
-step-down ratio (poor efficiency with linear regulators: 5/24 = 21%, wasting 79% as
-heat).
+The Raspberry Pi requires a regulated 5V supply. A buck (step-down) switching converter
+is the correct topology for 24V-to-5V conversion due to the high step-down ratio
+(poor efficiency with linear regulators: 5/24 = 21%, wasting 79% as heat).
 
-**Requirements per converter:**
+**Requirements (single converter for the Pi):**
 
-| Parameter | Pi 400 | Slave Pi (Zero 2W) |
-|-----------|--------|--------------------|
-| Output voltage | 5.0-5.25 V | 5.0-5.25 V |
-| Output current (design) | 1.5 A | 0.5 A |
-| Output current (peak) | 2.0 A | 1.0 A |
-| Input voltage range | 20-29 V | 20-29 V |
-| Ripple (max) | 50 mV p-p | 50 mV p-p |
+| Parameter | Value |
+|-----------|-------|
+| Output voltage | 5.0-5.25 V |
+| Output current (design) | 1.5 A |
+| Output current (peak) | 2.0 A |
+| Input voltage range | 20-29 V |
+| Ripple (max) | 50 mV p-p |
 
 **Recommended buck converter modules:**
 
@@ -430,27 +403,19 @@ heat).
 | Traco Power TSR 1-2450 | 6.5-36 V | 5.0 V fixed | 1.0 A | ~90% | SIP-3 package, simple | $5 |
 
 **Recommendation:**
-- **Pi 400:** Pololu D24V22F5 (5V/2.2A) or equivalent. Provides the full 2 A+ headroom
-  needed, high efficiency, compact form factor, and well-documented for Pi projects.
-  Available on DigiKey.
-- **Slave Pi (Zero 2 W):** Murata OKI-78SR-5/1.5-W36-C or Traco TSR 1-2450. The
-  Zero 2 W draws only ~350 mA typical; a 1.0-1.5 A converter is sufficient. These
-  SIP-3 modules are extremely simple to integrate (3-pin, drop-in).
-
-**Alternative -- single larger converter:** A single 5V/5A buck converter could power
-both Pis. This simplifies wiring but creates a single point of failure and requires
-careful trace/wire sizing. The dual-converter approach is recommended for isolation
-and fault tolerance.
+- **Pi:** Pololu D24V22F5 (5V/2.2A) or equivalent. Provides full 2 A+ headroom,
+  high efficiency, compact form factor, and well-documented for Pi projects.
+  Available on DigiKey. The Murata OKI-78SR-5/1.5 is also a good choice if the
+  1.5 A rating provides sufficient margin.
 
 ### 6.3 3.3V Logic Supply
 
 The 3.3V supply for logic signals is handled by the **onboard regulators** on each board:
-- **Pi 400:** Onboard 3.3V LDO on the PMIC (powered from 5V rail)
-- **Slave Pi:** Onboard 3.3V LDO (powered from 5V rail)
+- **Pi:** Onboard 3.3V LDO on the PMIC (powered from 5V rail)
 - **BTT Pico:** Onboard 3.3V LDO (powered from its onboard 5V buck, which runs off VIN)
 
-No external 3.3V regulator is needed. All inter-board signals (UART/serial) are 3.3V
-logic and can connect directly since all devices share the same logic level.
+No external 3.3V regulator is needed. The Pi communicates with the BTT Pico over USB
+serial; both devices share 3.3V logic levels.
 
 ### 6.4 24V Direct to BTT Pico
 
@@ -468,13 +433,12 @@ itself.
 
 | Connection | Wire Gauge (AWG) | Notes |
 |------------|------------------|-------|
-| UR30 24V to distribution point | 18 AWG (min) | Carries full system current (~2.5 A) |
+| UR30 24V to distribution point | 18 AWG (min) | Carries full system current (~1.4 A peak) |
 | 24V to BTT Pico VIN | 20 AWG | Motor current path (~1.2 A peak) |
-| 24V to each buck converter input | 22 AWG | Low current at 24V (~0.4 A per Pi) |
-| Buck converter 5V to Pi GPIO | 20 AWG | 1.5 A at 5V for Pi 400 |
-| Buck converter 5V to Zero 2W | 22 AWG | 0.5 A at 5V |
+| 24V to buck converter input | 22 AWG | Low current at 24V (~0.35 A for Pi) |
+| Buck converter 5V to Pi GPIO | 20 AWG | 1.5 A at 5V |
 | GND bus (common ground) | 18 AWG | All grounds must be tied together |
-| UART/serial signals | 26-28 AWG | Logic signals, minimal current |
+| USB cable (Pi to BTT Pico) | -- | Standard USB cable, minimal current |
 
 ### 6.6 Protection Components
 
@@ -485,17 +449,15 @@ itself.
 | Flyback diode on stepper | Inductive kickback protection | 1N4007 or SS34 Schottky across motor leads |
 | Bulk capacitor at 24V bus | Voltage stability | 100 uF / 35V electrolytic at distribution point |
 | Decoupling capacitors | Local noise filtering | 100 nF ceramic at each regulator input/output |
-| Polyfuse on each 5V output | Per-Pi protection | 2A resettable PTC fuse |
+| Polyfuse on 5V output | Pi overcurrent protection | 2A resettable PTC fuse |
 
 ### 6.7 Grounding
 
 **All grounds must be common (star topology preferred):**
 - UR30 0V/GND
-- Buck converter #1 GND
-- Buck converter #2 GND
+- Buck converter GND
 - BTT Pico GND
-- Pi 400 GND (via GPIO pin 6)
-- Slave Pi GND (via GPIO pin 6)
+- Pi GND (via GPIO pin 6)
 
 Use a central grounding point (busbar or terminal block) with short, low-impedance
 connections to each device. This prevents ground loops and ensures signal integrity
@@ -509,19 +471,17 @@ on the UART/serial lines.
 
 | Device | Current from 24V | Power (W) | Notes |
 |--------|------------------|-----------|-------|
-| Pi 400 (via buck @ ~90% eff) | 0.35 A | 8.5 W | 1.5A x 5.1V / 0.90 = 8.5W; 8.5/24 = 0.35A |
-| Slave Pi Zero 2W (via buck @ ~90% eff) | 0.12 A | 2.8 W | 0.5A x 5.1V / 0.90 = 2.8W; 2.8/24 = 0.12A |
+| Pi (via buck @ ~90% eff) | 0.35 A | 8.5 W | 1.5A x 5.1V / 0.90 = 8.5W; 8.5/24 = 0.35A |
 | BTT Pico (logic, no motor) | 0.08 A | 1.9 W | Board quiescent at 24V |
 | NEMA 17 stepper (via TMC2209) | 0.5-1.0 A | 12-24 W | Varies with speed/load |
-| **TOTAL (typical)** | **~1.1 A** | **~25 W** | Normal extrusion operation |
-| **TOTAL (peak/worst-case)** | **~1.6 A** | **~38 W** | Acceleration + all CPUs loaded |
+| **TOTAL (typical)** | **~1.0 A** | **~23 W** | Normal extrusion operation |
+| **TOTAL (peak/worst-case)** | **~1.4 A** | **~34 W** | Acceleration + CPU loaded |
 
 ### 7.2 Current Budget at 5V Rail
 
 | Device | Current at 5V | Power (W) |
 |--------|---------------|-----------|
-| Pi 400 | 1.5 A (design) | 7.65 W |
-| Slave Pi Zero 2W | 0.5 A (design) | 2.55 W |
+| Pi | 1.5 A (design) | 7.65 W |
 | BTT Pico (internal, from VIN) | ~0.2 A | 1.0 W |
 
 ### 7.3 Margin Analysis
@@ -530,10 +490,10 @@ on the UART/serial lines.
 
 | Scenario | Draw | Margin vs 2A | Status |
 |----------|------|--------------|--------|
-| Idle (all on, motor holding) | ~0.6 A | 1.4 A spare | OK |
-| Normal operation (extrusion) | ~1.1 A | 0.9 A spare | OK |
-| Peak (acceleration burst) | ~1.6 A | 0.4 A spare | OK (within continuous) |
-| Absolute worst case | ~2.0 A | 0 A | Marginal -- use burst rating |
+| Idle (all on, motor holding) | ~0.5 A | 1.5 A spare | OK |
+| Normal operation (extrusion) | ~1.0 A | 1.0 A spare | OK |
+| Peak (acceleration burst) | ~1.4 A | 0.6 A spare | OK (within continuous) |
+| Absolute worst case | ~1.8 A | 0.2 A | OK -- burst rating provides headroom |
 
 **Using external 24V supply via Power block (6 A max):**
 
@@ -542,15 +502,13 @@ additional peripherals (fans, sensors, LEDs) are planned.
 
 ### 7.4 Summary
 
-The system power budget is well within the UR30's capabilities. With the Pi Zero 2 W
-as the slave Pi:
-- **Typical continuous draw: ~1.1 A at 24V (~26 W)**
-- **Peak draw: ~1.6 A at 24V (~38 W)**
-- **UR30 internal 24V provides 2A continuous** -- adequate with margin
+The system power budget is well within the UR30's capabilities with a single Pi:
+- **Typical continuous draw: ~1.0 A at 24V (~23 W)**
+- **Peak draw: ~1.4 A at 24V (~34 W)**
+- **UR30 internal 24V provides 2A continuous** -- adequate with good margin
 - **External 24V option provides 6A** -- ample for future expansion
 
-If the Pi 4B is used instead of the Zero 2W, add ~0.25 A to all 24V figures (total
-typical becomes ~1.35 A). Still within the 2 A continuous budget.
+The Pi400 (optional HMI) is powered independently and does not affect this budget.
 
 ---
 
@@ -560,9 +518,8 @@ typical becomes ~1.35 A). Still within the 2 A continuous budget.
 
 | Document | URL |
 |----------|-----|
-| Pi 400 product brief | https://datasheets.raspberrypi.com/pi400/pi400-product-brief.pdf |
 | Pi 4B datasheet | https://datasheets.raspberrypi.com/rpi4/raspberry-pi-4-datasheet.pdf |
-| Pi Zero 2 W product brief | https://datasheets.raspberrypi.com/rpizero2/raspberry-pi-zero-2-w-product-brief.pdf |
+| Pi 400 product brief | https://datasheets.raspberrypi.com/pi400/pi400-product-brief.pdf |
 | BCM2711 peripherals | https://datasheets.raspberrypi.com/bcm2711/bcm2711-peripherals.pdf |
 | RP2040 datasheet | https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf |
 | Pi GPIO pinout | https://pinout.xyz/ |
@@ -620,12 +577,9 @@ POWER SOURCE:     UR30 Controller Box, Power block
                   Internal: 24V / 2A continuous (3.5A burst)
                   External: 24V / 6A (with added PSU)
 
-PI 400:           5.1V via GPIO pins 2+6 from Buck #1
+PI (headless):    5.1V via GPIO pins 2+6 from buck converter
+                  Klipper host + RTDE bridge + Moonraker
                   Design: 1.5A @ 5.1V = 7.65W
-                  GPIO: 3.3V logic
-
-SLAVE PI (Z2W):   5.1V via GPIO pins 2+6 from Buck #2
-                  Design: 0.5A @ 5.1V = 2.55W
                   GPIO: 3.3V logic
 
 BTT PICO:         24V direct to VIN (onboard 5V + 3.3V regs)
@@ -636,6 +590,9 @@ STEPPER:          NEMA 17, 1.7A rated, ~0.44 Nm
                   Driven at 24V via TMC2209 current chopping
                   24V bus draw: 0.5-1.0A typical
 
-TOTAL 24V DRAW:   ~1.1A typical, ~1.6A peak
-TOTAL POWER:      ~26W typical, ~38W peak
+PI400 (optional): HMI terminal on same network (SSH, web UI)
+                  Powered independently -- not in UR30 power budget
+
+TOTAL 24V DRAW:   ~1.0A typical, ~1.4A peak
+TOTAL POWER:      ~23W typical, ~34W peak
 ```
