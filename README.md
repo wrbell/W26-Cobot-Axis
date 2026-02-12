@@ -56,9 +56,10 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 | Area | Status |
 |------|--------|
 | **Phase 1: Ideation** | Complete |
-| **Phase 2: Design** | In progress — trade studies, analysis, and software design complete. Diagrams, BOM, and memo outstanding. Due Mar 1. |
+| **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
 | **Software development** | All source code written and unit tested (147 tests passing). Waiting on hardware for integration. |
-| **Phase 3: Build** | Not started — waiting on hardware receipt and Pi model decision |
+| **Phase 2 memo drafts** | 7 rough drafts in `docs/phase2/`: block diagram, circuit schematic, pin table, power budget, buck converter selection, BOM (~$128), and full memo text (~1,400 words). |
+| **Phase 3: Build** | Not started — waiting on hardware receipt |
 | **Phase 4: Test** | Not started — depends on Phase 3 |
 
 ### What's Done
@@ -67,8 +68,17 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - Problem analysis, latency analysis, RTDE register allocation — all complete
 - 3 trade studies with weighted scoring: Klipper (4.70), RTDE (4.85), SKR Pico (selected)
 - Formal design specification — 25 "shall" statements, interface tables, performance targets
-- 12 design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, Phase 2 memo outline, and final report outline
+- 13 design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, Phase 2 memo outline, final report outline, and stepper driving
 - Stepper driving design — consolidated justification for `[manual_stepper]`, TMC2209 config, step generation pipeline
+
+**Phase 2 Memo Rough Drafts (all in `docs/phase2/`):**
+- Block diagram — Mermaid diagram + draw.io redrawing guide with all blocks, signals, power, and feedback paths
+- Circuit schematic — full power distribution (UR30 24V → fuse → TVS → buck → Pi; 24V direct → SKR Pico), signal connections, protection components, wire schedule
+- Pin assignment table — all devices (SKR Pico E-axis, Pi 4B, UR30, switch, buck converter), 14 external wired connections
+- Power budget worksheet — per-device calculations, margin analysis (1.0A typical vs 2.0A budget), thermal considerations
+- Buck converter selection — Pololu D24V22F5 chosen over 5 alternatives, DigiKey P/N 2183-D24V22F5-ND
+- Bill of materials — 28 items, DigiKey/Newark part numbers, ~$128 total estimated cost
+- Memo text — all 8 sections (~1,400 words) with all 5 tables, ready to paste into Word
 
 **Source Code (all in `src/`):**
 - Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
@@ -80,21 +90,18 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 
 ### What's Remaining
 
-**Phase 2 deliverables (target Mar 1):**
-- [ ] Block diagram of functions/signals
-- [ ] Circuit diagram (schematic)
-- [ ] Circuit layout (physical arrangement)
-- [ ] Pin assignment table (blocked on Pi model decision)
-- [ ] Power budget worksheet (blocked on Pi model decision)
-- [ ] Buck converter selection (Pololu D24V22F5)
-- [ ] Bill of materials with supplier part numbers
+**Phase 2 memo — finishing (target Mar 1):**
+- [ ] Redraw block diagram in draw.io/Visio (from rough draft)
+- [ ] Redraw circuit schematic in KiCad/draw.io (from rough draft)
+- [ ] Circuit layout — physical arrangement (Dawood + Willem)
+- [ ] Verify DigiKey/Newark part numbers and stock
 - [ ] Location trade study (Dawood)
 - [ ] Mechanical component sketches (Dawood)
-- [ ] Compile Phase 2 PDF (≤5 pages)
+- [ ] Dawood: write Section 5 (mechanical concept) + Figures 3–4
+- [ ] Compile Phase 2 PDF (≤5 pages) in Microsoft Word
 - [ ] Present trade studies to Prof. Pannier
 
 **Phase 3 — hardware integration (target Mar 8–22):**
-- [ ] Decide Pi model for headless control node
 - [ ] Flash Klipper firmware onto SKR Pico
 - [ ] Install Klipper + Moonraker on Pi
 - [ ] Deploy configs and bridge daemon to Pi
@@ -136,10 +143,10 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 |------|------|--------|
 | 1 | The Need | **Complete** — UR30 lacks native extrusion axis |
 | 2 | Problem Analysis | **Complete** — `docs/problem_analysis.md`, `docs/latency_analysis.md` |
-| 3 | Specification | **Mostly complete** — formal spec with 25 requirements (`docs/design_specification.md`). Pin table and power budget pending Pi model. |
+| 3 | Specification | **Mostly complete** — formal spec with 25 requirements (`docs/design_specification.md`). Pin table and power budget drafted (`docs/phase2/`). |
 | 4 | Possible Solutions | **Mostly complete** — 3 trade studies done. Location study pending (Dawood). |
 | 5 | Solution Selection | **Complete** — Klipper, RTDE, SKR Pico selected and documented |
-| 6 | Detailed Design | **In progress** — software detailed design complete (12 design docs). Circuit schematic, layout, BOM pending. |
+| 6 | Detailed Design | **In progress** — software design complete (13 docs). Circuit schematic, block diagram, BOM, power budget, pin table, buck converter all drafted. Circuit layout and mechanical drawings pending. |
 | 7 | Working Drawings | **Upcoming** — final schematics, mechanical drawings, wiring diagrams |
 
 ---
@@ -193,7 +200,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   ├── skr_pico_klipper_setup.md  # Firmware build and flash guide
 │   ├── ur_rtde.md                 # RTDE protocol and register details
 │   ├── pi_power.md                # Power requirements and budget
-│   └── design/                    # Software design documents (12 docs)
+│   ├── phase2/                    # Phase 2 memo rough drafts (7 docs)
+│   │   ├── block_diagram.md       # System block diagram (Mermaid + redraw guide)
+│   │   ├── circuit_schematic.md   # Power distribution + signal connections
+│   │   ├── pin_assignments.md     # All devices, all pins, wiring list
+│   │   ├── power_budget.md        # Per-device calculations + margin analysis
+│   │   ├── buck_converter.md      # Pololu D24V22F5 selection + part numbers
+│   │   ├── bom.md                 # 28-item BOM with DigiKey/Newark P/Ns (~$128)
+│   │   └── memo_draft.md          # Full memo text (~1,400 words) + all tables
+│   └── design/                    # Software design documents (13 docs)
 │       ├── stepper_driving.md     # How Klipper drives the stepper (consolidated)
 │       ├── bridge_enhancements.md # 6 bridge enhancement designs
 │       ├── klipper_config.md      # Moonraker/Mainsail config design
@@ -248,6 +263,18 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | Trade study: Klipper (4.70) vs Lingua Franca (1.95) |
 | [`trades/comms.md`](trades/comms.md) | Trade study: RTDE vs alternative protocols |
 | [`trades/mcu.md`](trades/mcu.md) | Trade study: SKR Pico vs alternatives |
+
+### Phase 2 Memo Drafts
+
+| Document | Description |
+|----------|-------------|
+| [`docs/phase2/memo_draft.md`](docs/phase2/memo_draft.md) | Full memo text (~1,400 words), all 8 sections + 5 tables |
+| [`docs/phase2/block_diagram.md`](docs/phase2/block_diagram.md) | System block diagram — Mermaid + draw.io redrawing guide |
+| [`docs/phase2/circuit_schematic.md`](docs/phase2/circuit_schematic.md) | Circuit schematic — power distribution, signal connections, protection |
+| [`docs/phase2/pin_assignments.md`](docs/phase2/pin_assignments.md) | Pin assignments — all devices, 14 external wired connections |
+| [`docs/phase2/power_budget.md`](docs/phase2/power_budget.md) | Power budget — per-device calculations, ~1.0A typical vs 2.0A budget |
+| [`docs/phase2/buck_converter.md`](docs/phase2/buck_converter.md) | Buck converter selection — Pololu D24V22F5, DigiKey P/N |
+| [`docs/phase2/bom.md`](docs/phase2/bom.md) | Bill of materials — 28 items, ~$128 total, DigiKey/Newark P/Ns |
 
 ## Team
 
