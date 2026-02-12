@@ -47,13 +47,74 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - **URScript** — program on UR30 teach pendant, writes extrusion commands to RTDE output registers.
 - **`ur_rtde`** — SDU library (C++ with Python bindings) for RTDE communication.
 
+---
+
+## Current Progress (as of Feb 12, 2026 — Week 6)
+
+### Status Summary
+
+| Area | Status |
+|------|--------|
+| **Phase 1: Ideation** | Complete |
+| **Phase 2: Design** | In progress — trade studies, analysis, and software design complete. Diagrams, BOM, and memo outstanding. Due Mar 1. |
+| **Software development** | All source code written and unit tested (147 tests passing). Waiting on hardware for integration. |
+| **Phase 3: Build** | Not started — waiting on hardware receipt and Pi model decision |
+| **Phase 4: Test** | Not started — depends on Phase 3 |
+
+### What's Done
+
+**Analysis and Design (Bolton Steps 1–5):**
+- Problem analysis, latency analysis, RTDE register allocation — all complete
+- 3 trade studies with weighted scoring: Klipper (4.70), RTDE (4.85), SKR Pico (selected)
+- Formal design specification — 25 "shall" statements, interface tables, performance targets
+- 12 design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, Phase 2 memo outline, and final report outline
+- Stepper driving design — consolidated justification for `[manual_stepper]`, TMC2209 config, step generation pipeline
+
+**Source Code (all in `src/`):**
+- Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
+- Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client
+- Unit tests: 147 tests across 3 test files (42 + 34 + 71), all passing
+- Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209), `moonraker.conf`, `mainsail.cfg` (pump macros)
+- URScript: extrusion control library, system validation test (9 sub-tests), pump calibration test (4 sub-tests)
+- Deployment: `requirements.txt`, systemd service, 11-step deploy script, full setup guide
+
+### What's Remaining
+
+**Phase 2 deliverables (target Mar 1):**
+- [ ] Block diagram of functions/signals
+- [ ] Circuit diagram (schematic)
+- [ ] Circuit layout (physical arrangement)
+- [ ] Pin assignment table (blocked on Pi model decision)
+- [ ] Power budget worksheet (blocked on Pi model decision)
+- [ ] Buck converter selection (Pololu D24V22F5)
+- [ ] Bill of materials with supplier part numbers
+- [ ] Location trade study (Dawood)
+- [ ] Mechanical component sketches (Dawood)
+- [ ] Compile Phase 2 PDF (≤5 pages)
+- [ ] Present trade studies to Prof. Pannier
+
+**Phase 3 — hardware integration (target Mar 8–22):**
+- [ ] Decide Pi model for headless control node
+- [ ] Flash Klipper firmware onto SKR Pico
+- [ ] Install Klipper + Moonraker on Pi
+- [ ] Deploy configs and bridge daemon to Pi
+- [ ] End-to-end smoke test: UR30 → stepper moves
+- [ ] Set up URSim on Windows for integration testing
+- [ ] Mechanical assembly (Dawood)
+
+**Phase 4 — testing and reporting (target Mar 23–31):**
+- [ ] End-to-end functional test, latency characterization, accuracy test
+- [ ] Fault handling and endurance testing
+- [ ] Final report (≤2000 words, due Apr 23)
+- [ ] Oral presentation (Apr 24)
+
+---
+
 ## Project Schedule
 
 **Target completion:** Mar 31, 2026 | **Final report:** Apr 23 | **Oral presentation:** Apr 24, 6:30–9:30 PM
 
 See [`schedule.md`](schedule.md) for the full weekly timeline.
-
-### Accelerated Weekly Timeline
 
 | Week | Dates | Phase | Milestone | Status |
 |------|-------|-------|-----------|--------|
@@ -61,203 +122,132 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | 6–7 | Feb 9–22 | **Phase 2** | Design — trade studies, analysis, specs | **In Progress** |
 | 8 | Feb 23–Mar 1 | **Phase 2** | Design refinement, BOM, Phase 2 memo submission | Upcoming |
 | 9 | Mar 2–8 | **Phase 3** | Spring Break — flash firmware, Klipper setup, first stepper test | Upcoming |
-| 10 | Mar 9–15 | **Phase 3** | RTDE bridge daemon, URScript program | Upcoming |
-| 11 | Mar 16–22 | **Phase 3** | Integration — full chain working, progress memo | Upcoming |
+| 10 | Mar 9–15 | **Phase 3** | Deploy bridge daemon, URScript, integration | Upcoming |
+| 11 | Mar 16–22 | **Phase 3** | Full chain working, tuning, progress memo | Upcoming |
 | 12 | Mar 23–29 | **Phase 4** | System testing, latency measurement, fault testing | Upcoming |
 | 13 | Mar 30–Apr 5 | **Phase 4** | Final testing by Mar 31, draft report | Upcoming |
 | — | Apr 6–23 | Buffer | Report polish, supplementary materials | Upcoming |
-
-### Key Milestones
-
-| Date | Milestone |
-|------|-----------|
-| Feb 8 | Roles assigned, core components selected |
-| **Mar 1** | **Phase 2 memo submitted** |
-| Mar 8 | Klipper running, stepper moves (Spring Break) |
-| Mar 22 | Full chain working: UR30 → Pi → SKR Pico → stepper |
-| **Mar 31** | **Functional prototype complete — all testing done** |
-| Apr 5 | Final report draft and presentation rehearsal |
-| **Apr 23** | **Final report due** |
-| **Apr 24** | **Oral presentation and design defense** |
 
 ---
 
 ## Bolton's 7-Step Design Process
 
-The course requires following and documenting Bolton's mechatronics design process (see [`reqs/process.md`](reqs/process.md)). Progress per step:
-
-### Step 1: The Need — Complete
-
-- [x] Identify the need: UR30 lacks a native extrusion axis for metal paste dispensing
-- [x] Document in [`reqs/initial_scope.md`](reqs/initial_scope.md)
-
-### Step 2: Problem Analysis — Complete
-
-- [x] Formal problem analysis — [`docs/problem_analysis.md`](docs/problem_analysis.md)
-  - Environmental constraints, performance requirements, failure modes
-  - Power constraints (2A @ 24V from UR30)
-  - Communication constraints (RTDE 500Hz, non-RT Linux host)
-- [x] Latency analysis — [`docs/latency_analysis.md`](docs/latency_analysis.md) (~8ms typical, adequate for paste)
-
-### Step 3: Specification — In Progress
-
-- [ ] Write formal design specification (functions, interfaces, accuracy targets, operating environment)
-- [x] RTDE register allocation finalized — [`docs/register_allocation.md`](docs/register_allocation.md)
-- [ ] Pin assignment table
-- [ ] Power budget worksheet
-
-### Step 4: Possible Solutions — In Progress
-
-- [x] Firmware: Klipper vs Lingua Franca — [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md)
-- [x] Communication: RTDE vs alternatives — [`trades/comms.md`](trades/comms.md)
-- [x] MCU platform: SKR Pico vs alternatives — [`trades/mcu.md`](trades/mcu.md)
-- [ ] Location: end effector vs base-mounted vs gantry (Dawood)
-
-### Step 5: Solution Selection — Complete
-
-- [x] Klipper selected (4.70 vs 1.95)
-- [x] RTDE selected (4.85 vs next-best 3.30)
-- [x] SKR Pico selected (already on hand, Klipper-native)
-- [x] Architecture documented in README and CLAUDE.md
-
-### Step 6: Detailed Design — In Progress
-
-- [ ] Circuit diagram (schematic)
-- [ ] Circuit layout (physical arrangement)
-- [ ] Block diagram of functions/signals
-- [ ] Bill of materials with purchasing instructions
-- [ ] Engineering analysis (motor loads, power budget)
-- [ ] 3D-printed component designs (Dawood)
-
-### Step 7: Working Drawings — Upcoming (Phase 3)
-
-- [ ] Final circuit schematics
-- [ ] Final mechanical drawings / CAD
-- [ ] Wiring diagrams with pin assignments
-- [ ] System block diagram
+| Step | Name | Status |
+|------|------|--------|
+| 1 | The Need | **Complete** — UR30 lacks native extrusion axis |
+| 2 | Problem Analysis | **Complete** — `docs/problem_analysis.md`, `docs/latency_analysis.md` |
+| 3 | Specification | **Mostly complete** — formal spec with 25 requirements (`docs/design_specification.md`). Pin table and power budget pending Pi model. |
+| 4 | Possible Solutions | **Mostly complete** — 3 trade studies done. Location study pending (Dawood). |
+| 5 | Solution Selection | **Complete** — Klipper, RTDE, SKR Pico selected and documented |
+| 6 | Detailed Design | **In progress** — software detailed design complete (12 design docs). Circuit schematic, layout, BOM pending. |
+| 7 | Working Drawings | **Upcoming** — final schematics, mechanical drawings, wiring diagrams |
 
 ---
-
-## Course Phase Tracking (Accelerated Schedule)
-
-> Target: functional prototype by **Mar 31**. Apr 1–23 is buffer for documentation and polish.
-
-### Phase 1: Ideation and Scope — Complete (Week 5: Feb 2–8)
-
-- [x] Team formation and role assignment
-- [x] Project idea submitted — stepper motor driver as 7th axis for UR30
-- [x] Scope defined — [`reqs/initial_scope.md`](reqs/initial_scope.md)
-- [x] Instructor go/no-go received — approved with feedback
-
-### Phase 2: Design and Preliminary Analysis — In Progress (Weeks 6–8: Feb 9 – Mar 1)
-
-**Deliverable:** Written memo (PDF, ≤5 pages). **Target: submit by Mar 1.**
-
-| Category | Task | Status | Week |
-|----------|------|--------|------|
-| **Diagrams** | Block diagram of functions/signals | Not started | 7 |
-| | Circuit diagram (schematic) | Not started | 7–8 |
-| | Circuit layout (physical arrangement) | Not started | 8 |
-| | Mechanical component sketches (Dawood) | Not started | 7–8 |
-| **Trade studies** | Klipper vs Lingua Franca | **Complete** — [`lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | 6 |
-| | Communication protocol | **Complete** — [`comms.md`](trades/comms.md) | 6 |
-| | MCU platform | **Complete** — [`mcu.md`](trades/mcu.md) | 6 |
-| | Location (Dawood) | Not started | 7 |
-| **Analysis** | Problem analysis (Bolton Step 2) | **Complete** — [`problem_analysis.md`](docs/problem_analysis.md) | 6 |
-| | RTDE register allocation | **Complete** — [`register_allocation.md`](docs/register_allocation.md) | 6 |
-| | Latency analysis | **Complete** — [`latency_analysis.md`](docs/latency_analysis.md) | 6 |
-| | Motor load / torque analysis | Pending hardware receipt | 8 |
-| | Power budget | Not started | 7 |
-| **Electrical** | Pin assignment table | Not started | 7 |
-| | Buck converter selection | Not started | 7 |
-| **BOM** | Bill of materials + purchasing instructions | Not started | 8 |
-| **Mechanical** | 3D-printed component identification (Dawood) | Not started | 7–8 |
-| **Submission** | Compile Phase 2 PDF (≤5 pages) | Not started | 8 |
-
-### Phase 3: Build and Additional Design/Analysis (Weeks 9–11: Mar 2 – Mar 22)
-
-Week 9 is Spring Break — dedicated build time.
-
-| Task | Status | Week |
-|------|--------|------|
-| Flash Klipper firmware onto SKR Pico | Not started | 9 |
-| Install Klipper + Moonraker on Pi | Not started | 9 |
-| Write `printer.cfg` with `[manual_stepper]` | Not started | 9 |
-| Test: send G-code, confirm stepper moves | Not started | 9 |
-| Configure TMC2209 UART (run_current, stealthchop) | Not started | 9 |
-| Write RTDE bridge daemon (Python) | Not started | 10 |
-| Write URScript program | Not started | 10 |
-| Implement status feedback (Klipper → RTDE → UR30) | Not started | 10–11 |
-| 3D print mounting components (Dawood) | Not started | 9–10 |
-| Assemble electronics + route cabling (Dawood) | Not started | 10–11 |
-| Mount to end effector / robot (Dawood) | Not started | 11 |
-| Progress memo to instructor | Not started | 11 |
-
-### Phase 4: Test and Reporting (Weeks 12–13: Mar 23 – Apr 5)
-
-Functional testing done by **Mar 31**. Week 13 for documentation.
-
-| Task | Status | Week |
-|------|--------|------|
-| End-to-end functional test (UR30 → stepper moves) | Not started | 12 |
-| Latency characterization (oscilloscope measurement) | Not started | 12 |
-| Accuracy test (commanded vs actual speed/position) | Not started | 12 |
-| Fault handling test (comms loss, stall, power) | Not started | 12 |
-| Draft final report | Not started | 13 |
-| Rehearse presentation | Not started | 13 |
-
-### Buffer: Documentation Polish (Apr 6 – Apr 23)
-
-| Task | Status | Due |
-|------|--------|-----|
-| Final report (≤2000 words, PDF) | Not started | Apr 23 |
-| Supplementary materials (code, drawings) | Not started | Apr 23 |
-| Oral presentation + design defense | Not started | Apr 24 |
 
 ## Repository Structure
 
 ```
-├── CLAUDE.md                   # AI assistant context (Claude Code)
-├── README.md                   # This file
-├── schedule.md                 # Accelerated project schedule
-├── todo.md                     # Project task tracker (Bolton process + phase deliverables)
-├── trades/                     # Trade studies
-│   ├── lingua_franca_vs_klipper.md  # Klipper (4.70) vs Lingua Franca (1.95)
-│   ├── comms.md                # RTDE vs alternative UR30 protocols
-│   └── mcu.md                  # SKR Pico vs alternative MCU platforms
-├── docs/                       # Engineering analysis and technical reference
-│   ├── problem_analysis.md     # Bolton Step 2: formal problem analysis
-│   ├── register_allocation.md  # RTDE register mapping (finalized)
-│   ├── latency_analysis.md     # End-to-end latency analysis
-│   ├── klipper_protocols.md    # Klipper API surface and serial protocol
-│   ├── skr_pico_specs.md       # SKR Pico V1.0 hardware reference
-│   ├── skr_pico_klipper_setup.md  # SKR Pico + Klipper setup guide
-│   ├── ur_rtde.md              # RTDE protocol, registers, latency
-│   └── pi_power.md             # Power requirements and budget
-├── reqs/                       # Course requirements and process
-│   ├── about.md                # Course project overview
-│   ├── initial_scope.md        # Project scope definition
-│   ├── phase2.md               # Phase 2 deliverable requirements
-│   ├── phase3.md               # Phase 3/4 final report requirements
-│   ├── process.md              # Bolton's 7-step design process
-│   └── information_needs.md    # Data/information gaps per task
+├── CLAUDE.md                      # AI assistant context (Claude Code)
+├── README.md                      # This file
+├── schedule.md                    # Accelerated project schedule
+├── todo.md                        # Master task tracker
+├── src/
+│   ├── bridge/                    # Python RTDE-to-Klipper bridge daemon
+│   │   ├── __main__.py            # Entry point (python -m bridge)
+│   │   ├── bridge_daemon.py       # Main loop: RTDE read → translate → Klipper command
+│   │   ├── config.py              # Register mappings, constants, defaults
+│   │   ├── klipper_client.py      # klippy Unix socket client
+│   │   ├── rtde_client.py         # ur_rtde wrapper with stub fallback
+│   │   ├── watchdog.py            # RTDE timestamp-based stale detection
+│   │   ├── klipper_status.py      # TMC2209 driver status polling
+│   │   ├── data_logger.py         # 17-column CSV logging with rotation
+│   │   ├── extrusion_profile.py   # Linear/polynomial/lookup profiles
+│   │   ├── dashboard_client.py    # UR30 Dashboard Server (port 29999)
+│   │   ├── profiles.json          # Pre-defined extrusion profiles
+│   │   └── tests/                 # pytest suite (147 tests)
+│   │       ├── conftest.py        # Shared fixtures (FakeKlippy, mock sockets)
+│   │       ├── test_klipper_client.py   # 42 tests
+│   │       ├── test_rtde_client.py      # 34 tests
+│   │       └── test_bridge_daemon.py    # 71 tests
+│   ├── klipper/                   # Klipper configuration files
+│   │   ├── printer.cfg            # SKR Pico, manual_stepper pump, TMC2209
+│   │   ├── moonraker.conf         # Moonraker API (port 7125, auth, updates)
+│   │   └── mainsail.cfg           # Pump macros (PUMP_STATUS, PUMP_TEST, etc.)
+│   ├── urscript/                  # URScript programs for UR30
+│   │   ├── extrusion_control.script  # Helper functions, speed-sync, retraction
+│   │   ├── test_basic.script         # System validation (9 sub-tests)
+│   │   └── test_calibration.script   # Pump calibration (4 sub-tests)
+│   └── systemd/
+│       └── w26-bridge.service     # systemd unit for bridge daemon
+├── trades/                        # Trade studies (weighted scoring)
+│   ├── lingua_franca_vs_klipper.md
+│   ├── comms.md
+│   └── mcu.md
+├── docs/                          # Engineering analysis and reference
+│   ├── problem_analysis.md        # Bolton Step 2
+│   ├── register_allocation.md     # RTDE register mapping
+│   ├── latency_analysis.md        # End-to-end latency (~8ms typical)
+│   ├── design_specification.md    # Bolton Step 3 (25 requirements)
+│   ├── klipper_protocols.md       # Klipper API and serial protocol
+│   ├── skr_pico_specs.md          # SKR Pico V1.0 hardware reference
+│   ├── skr_pico_klipper_setup.md  # Firmware build and flash guide
+│   ├── ur_rtde.md                 # RTDE protocol and register details
+│   ├── pi_power.md                # Power requirements and budget
+│   └── design/                    # Software design documents (12 docs)
+│       ├── stepper_driving.md     # How Klipper drives the stepper (consolidated)
+│       ├── bridge_enhancements.md # 6 bridge enhancement designs
+│       ├── klipper_config.md      # Moonraker/Mainsail config design
+│       ├── urscript_programs.md   # URScript test program designs
+│       ├── testing_strategy.md    # Unit + integration test strategy
+│       ├── deployment.md          # Deploy script and systemd design
+│       ├── network_architecture.md # IP, ports, firewall, DNS
+│       ├── integration_plan.md    # Phase 3 step-by-step plan
+│       ├── test_procedures.md     # Phase 4 test procedures
+│       ├── phase2_deliverables.md # Phase 2 memo planning
+│       ├── phase2_memo_outline.md # Memo structure and content
+│       └── final_report_outline.md # Final report structure
+├── reqs/                          # Course requirements
+│   ├── about.md
+│   ├── initial_scope.md
+│   ├── phase2.md
+│   ├── phase3.md
+│   ├── process.md
+│   └── information_needs.md
+├── deploy.sh                      # 11-step idempotent deployment script
+├── SETUP.md                       # Fresh Pi setup guide
+└── requirements.txt               # Python dependencies (ur-rtde)
 ```
 
 ## Key Documents
 
+### Source Code
+
+| Component | Location | Tests |
+|-----------|----------|-------|
+| Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` | 71 tests |
+| Bridge config (registers, constants) | `src/bridge/config.py` | — |
+| Klipper Unix socket client | `src/bridge/klipper_client.py` | 42 tests |
+| RTDE client wrapper | `src/bridge/rtde_client.py` | 34 tests |
+| Klipper printer config | `src/klipper/printer.cfg` | — |
+| Moonraker config | `src/klipper/moonraker.conf` | — |
+| Mainsail pump macros | `src/klipper/mainsail.cfg` | — |
+| URScript extrusion program | `src/urscript/extrusion_control.script` | — |
+| URScript system validation | `src/urscript/test_basic.script` | — |
+| URScript pump calibration | `src/urscript/test_calibration.script` | — |
+
+### Design and Analysis
+
 | Document | Description |
 |----------|-------------|
 | [`todo.md`](todo.md) | Full task list organized by Bolton's design process and project phases |
-| [`reqs/information_needs.md`](reqs/information_needs.md) | What data we still need to gather, per task |
+| [`docs/design_specification.md`](docs/design_specification.md) | Bolton Step 3: 25 formal requirements, interface tables, performance targets |
 | [`docs/problem_analysis.md`](docs/problem_analysis.md) | Bolton Step 2: formal problem analysis |
-| [`docs/register_allocation.md`](docs/register_allocation.md) | RTDE register mapping — finalized design decision |
+| [`docs/register_allocation.md`](docs/register_allocation.md) | RTDE register mapping — 6 output, 5 input registers |
 | [`docs/latency_analysis.md`](docs/latency_analysis.md) | End-to-end latency analysis (~8ms typical) |
+| [`docs/design/stepper_driving.md`](docs/design/stepper_driving.md) | How Klipper drives the stepper — consolidated justification |
 | [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | Trade study: Klipper (4.70) vs Lingua Franca (1.95) |
-| [`trades/comms.md`](trades/comms.md) | Trade study: RTDE vs alternative UR30 protocols |
-| [`trades/mcu.md`](trades/mcu.md) | Trade study: SKR Pico vs alternative MCU platforms |
-| [`docs/skr_pico_specs.md`](docs/skr_pico_specs.md) | SKR Pico V1.0 complete hardware reference |
-| [`docs/ur_rtde.md`](docs/ur_rtde.md) | RTDE protocol, register details, latency considerations |
-| [`docs/klipper_protocols.md`](docs/klipper_protocols.md) | Klipper API surface and serial protocol |
+| [`trades/comms.md`](trades/comms.md) | Trade study: RTDE vs alternative protocols |
+| [`trades/mcu.md`](trades/mcu.md) | Trade study: SKR Pico vs alternatives |
 
 ## Team
 
