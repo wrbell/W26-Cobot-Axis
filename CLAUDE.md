@@ -77,6 +77,8 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | RTDE client wrapper | `src/bridge/rtde_client.py` |
 | Klipper printer config | `src/klipper/printer.cfg` |
 | URScript extrusion program | `src/urscript/extrusion_control.script` |
+| URScript system validation test | `src/urscript/test_basic.script` |
+| URScript pump calibration test | `src/urscript/test_calibration.script` |
 
 ## Design Documents
 

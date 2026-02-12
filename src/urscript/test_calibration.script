@@ -1,0 +1,696 @@
+# W26 Cobot Axis — Pump Calibration Test (test_calibration.script)
+# Runs on: UR30 teach pendant / controller
+# Purpose: Characterize pump output vs. stepper speed to determine
+#          EXTRUSION_MULTIPLIER and optimal retraction parameters.
+#
+# Prerequisites (all from validation test, plus):
+#   - System validation test (test_basic.script) PASSED
+#   - Pump physically connected to stepper motor
+#   - Pump primed with paste or test fluid (no air in fluid path)
+#   - Scale or graduated cylinder available for measurement
+#   - Catch tray under nozzle
+#   - Clean nozzle tip
+#
+# Register mapping (from docs/register_allocation.md):
+#
+# OUTPUT (UR30 -> Pi, written here):
+#   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)
+#   output_double_register_0 = commanded extrusion rate (mm/s)
+#   output_double_register_1 = TCP speed magnitude (mm/s)
+#   output_bit_register_64   = extrusion enable
+#   output_bit_register_65   = emergency stop
+#   output_bit_register_66   = home stepper
+#
+# INPUT (Pi -> UR30, read here):
+#   input_int_register_0     = stepper status (0=idle, 1=running, 2=error, 3=homing)
+#   input_int_register_1     = error code (0=none, 1=comms_lost, 2=stall, 3=thermal)
+#   input_double_register_0  = actual extrusion rate (mm/s)
+#   input_bit_register_64    = stepper ready
+#   input_bit_register_65    = stepper fault
+
+# ===================================================================
+# Configuration
+# ===================================================================
+EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
+MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
+ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
+
+# Calibration parameters
+DISPENSE_TIME = 10.0          # seconds to dispense at each speed level
+SETTLE_TIME = 2.0             # seconds to wait after stopping for drips
+INTER_TRIAL_PAUSE = 5.0       # seconds between trials for operator to read scale
+
+# Speed setpoints for flow rate characterization (mm/s)
+# 8 levels spanning the full range from low to maximum
+NUM_SPEED_LEVELS = 8
+SPEED_1 = 2.0
+SPEED_2 = 5.0
+SPEED_3 = 10.0
+SPEED_4 = 15.0
+SPEED_5 = 20.0
+SPEED_6 = 30.0
+SPEED_7 = 40.0
+SPEED_8 = 50.0
+
+# Speed-sync test TCP speeds (mm/s) for Sub-test B
+NUM_TCP_SPEEDS = 4
+TCP_SPEED_1 = 0.010    # 10 mm/s (m/s for movel)
+TCP_SPEED_2 = 0.020    # 20 mm/s
+TCP_SPEED_3 = 0.030    # 30 mm/s
+TCP_SPEED_4 = 0.050    # 50 mm/s
+
+# Retraction test parameters for Sub-test C
+NUM_RETRACT_TRIALS = 6
+RETRACT_EXTRUDE_SPEED = 20.0   # mm/s extrusion speed before retraction
+RETRACT_EXTRUDE_TIME = 5.0     # seconds to extrude before each retraction trial
+RETRACT_OBSERVE_TIME = 5.0     # seconds to observe drip after retraction
+
+# Retraction trial parameters: [distance_mm, speed_mm_s]
+RETRACT_DIST_1 = 0.0
+RETRACT_SPD_1 = 0.0
+RETRACT_DIST_2 = 0.5
+RETRACT_SPD_2 = 5.0
+RETRACT_DIST_3 = 1.0
+RETRACT_SPD_3 = 5.0
+RETRACT_DIST_4 = 2.0
+RETRACT_SPD_4 = 10.0
+RETRACT_DIST_5 = 3.0
+RETRACT_SPD_5 = 10.0
+RETRACT_DIST_6 = 5.0
+RETRACT_SPD_6 = 20.0
+
+# Latency measurement parameters for Sub-test D
+LATENCY_STEP_SPEED = 20.0     # mm/s step change for latency test
+LATENCY_THRESHOLD = 1.0       # mm/s threshold to detect rate change
+LATENCY_REPEATS = 10           # number of latency measurements
+LATENCY_MAX_CYCLES = 500       # max sync cycles to wait (1.0s at 2ms/cycle)
+
+# Sub-test B and G waypoints -- MUST be taught on the physical robot.
+# Replace these placeholder poses with actual taught positions.
+# Path should be a straight line of known length (measure with ruler).
+START_POSE = p[0.3, -0.2, 0.1, 0, 3.14, 0]
+END_POSE   = p[0.4, -0.2, 0.1, 0, 3.14, 0]
+
+# ===================================================================
+# Helper functions (from extrusion_control.script)
+# ===================================================================
+
+def set_extrusion_mode(mode):
+    write_output_integer_register(0, mode)
+end
+
+def set_extrusion_rate(rate_mm_s):
+    local clamped = rate_mm_s
+    if clamped > MAX_EXTRUSION_RATE:
+        clamped = MAX_EXTRUSION_RATE
+    end
+    write_output_float_register(0, clamped)
+end
+
+def set_extrusion_enable(enabled):
+    write_output_boolean_register(64, enabled)
+end
+
+def set_estop(active):
+    write_output_boolean_register(65, active)
+end
+
+def set_home_command(active):
+    write_output_boolean_register(66, active)
+end
+
+def update_tcp_speed():
+    local speed_vec = get_actual_tcp_speed()
+    local speed_mag = norm(speed_vec)
+    local speed_mm_s = speed_mag * 1000.0
+    write_output_float_register(1, speed_mm_s)
+    return speed_mm_s
+end
+
+def get_stepper_status():
+    return read_input_integer_register(0)
+end
+
+def get_stepper_error():
+    return read_input_integer_register(1)
+end
+
+def get_actual_extrusion_rate():
+    return read_input_float_register(0)
+end
+
+def is_stepper_ready():
+    return read_input_boolean_register(64)
+end
+
+def is_stepper_fault():
+    return read_input_boolean_register(65)
+end
+
+def wait_for_stepper_ready(timeout_s):
+    local t0 = 0.0
+    while is_stepper_ready() == False:
+        sync()
+        t0 = t0 + get_steptime()
+        if t0 > timeout_s:
+            popup("Stepper not ready -- timeout", error=True)
+            return False
+        end
+    end
+    return True
+end
+
+def init_registers():
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
+    set_extrusion_enable(False)
+    set_estop(False)
+    set_home_command(False)
+    write_output_float_register(1, 0.0)
+end
+
+def extrude_along_path(target_pose, speed, accel):
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_enable(False)
+        return
+    end
+
+    movel(target_pose, a=accel, v=speed)
+
+    while is_steady() == False:
+        local tcp_speed = update_tcp_speed()
+
+        if ENABLE_SPEED_SYNC:
+            local rate = tcp_speed * EXTRUSION_MULTIPLIER
+            set_extrusion_rate(rate)
+        end
+
+        if is_stepper_fault():
+            local err = get_stepper_error()
+            popup(str_cat("Stepper fault: error code ", err), error=True)
+            stopl(2.0)
+            break
+        end
+
+        sync()
+    end
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+def retract(distance_mm, speed_mm_s):
+    set_extrusion_enable(True)
+    set_extrusion_mode(2)
+    set_extrusion_rate(speed_mm_s)
+
+    local retract_time = distance_mm / speed_mm_s
+    sleep(retract_time)
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+# ===================================================================
+# Calibration utility functions
+# ===================================================================
+
+def log_to_pendant(msg):
+    textmsg(msg)
+end
+
+def status_name(code):
+    if code == 0:
+        return "idle"
+    elif code == 1:
+        return "running"
+    elif code == 2:
+        return "error"
+    elif code == 3:
+        return "homing"
+    else:
+        return "unknown"
+    end
+end
+
+def check_system_ready():
+    # Verify system is ready before starting calibration
+    init_registers()
+    sleep(0.5)
+
+    local st = get_stepper_status()
+    local rd = is_stepper_ready()
+    local ft = is_stepper_fault()
+
+    if rd == False:
+        textmsg("ERROR: Stepper not ready. Check bridge daemon and Klipper.")
+        popup("Stepper not ready -- cannot proceed with calibration", error=True)
+        return False
+    end
+
+    if ft == True:
+        textmsg("ERROR: Stepper fault active. Clear fault before calibration.")
+        popup("Stepper fault active -- cannot proceed", error=True)
+        return False
+    end
+
+    if st != 0:
+        textmsg(str_cat("ERROR: Stepper not idle (status=", st, "). Init and retry."))
+        popup("Stepper not idle -- cannot proceed", error=True)
+        return False
+    end
+
+    textmsg("System ready for calibration.")
+    return True
+end
+
+def dispense_at_speed(speed_mm_s, duration_s):
+    # Dispense at a fixed speed for a fixed duration.
+    # Returns the actual rate read from Klipper after stabilization.
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+    set_extrusion_rate(speed_mm_s)
+
+    sleep(duration_s)
+
+    local actual_rate = get_actual_extrusion_rate()
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+
+    return actual_rate
+end
+
+# ===================================================================
+# Sub-test A: Flow Rate vs. Stepper Speed (Linearity)
+# ===================================================================
+def cal_a_flow_rate_linearity():
+    textmsg("=============================================================")
+    textmsg("  Sub-test A: Flow Rate vs. Stepper Speed (Linearity)")
+    textmsg("=============================================================")
+    textmsg(str_cat("  Dispense time per trial: ", DISPENSE_TIME, " s"))
+    textmsg(str_cat("  Number of speed levels: ", NUM_SPEED_LEVELS))
+    textmsg("  OPERATOR: Tare scale before each trial.")
+    textmsg("  OPERATOR: Record dispensed mass on the data sheet.")
+    textmsg("-------------------------------------------------------------")
+
+    # Speed levels stored in local variables for iteration
+    local speeds = [SPEED_1, SPEED_2, SPEED_3, SPEED_4, SPEED_5, SPEED_6, SPEED_7, SPEED_8]
+
+    local trial = 1
+    while trial <= NUM_SPEED_LEVELS:
+        local speed = speeds[trial - 1]
+
+        textmsg(str_cat("--- Trial ", trial, " of ", NUM_SPEED_LEVELS, " ---"))
+        textmsg(str_cat("  Commanded speed: ", speed, " mm/s"))
+        textmsg(str_cat("  Duration: ", DISPENSE_TIME, " s"))
+        textmsg("  ACTION: Tare scale now. Dispensing will begin in 3s...")
+
+        sleep(3.0)
+
+        # Check system is still healthy
+        if is_stepper_fault():
+            textmsg(str_cat("ERROR: Fault detected before trial ", trial, " -- aborting."))
+            init_registers()
+            return
+        end
+
+        textmsg(str_cat("  DISPENSING at ", speed, " mm/s..."))
+        local actual_rate = dispense_at_speed(speed, DISPENSE_TIME)
+
+        textmsg("  DISPENSING COMPLETE -- flow stopped.")
+        textmsg(str_cat("  Actual rate (Klipper): ", actual_rate, " mm/s"))
+        textmsg(str_cat("  Settling for ", SETTLE_TIME, " s..."))
+        sleep(SETTLE_TIME)
+
+        textmsg("  ACTION: Read scale and record mass on data sheet.")
+        textmsg(str_cat("  DATA: trial=", trial, " cmd_speed=", speed, " actual_rate=", actual_rate))
+
+        if trial < NUM_SPEED_LEVELS:
+            textmsg(str_cat("  Pausing ", INTER_TRIAL_PAUSE, " s before next trial..."))
+            sleep(INTER_TRIAL_PAUSE)
+        end
+
+        trial = trial + 1
+    end
+
+    init_registers()
+    textmsg("=============================================================")
+    textmsg("  Sub-test A COMPLETE")
+    textmsg("  Review data sheet for flow rate vs. speed results.")
+    textmsg("  Post-processing: Plot flow_rate (mL/s) vs. cmd_speed (mm/s)")
+    textmsg("  to determine pump volumetric constant K_pump.")
+    textmsg("=============================================================")
+    sleep(2.0)
+end
+
+# ===================================================================
+# Sub-test B: Speed-Synced Extrusion with Gravimetric Check
+# ===================================================================
+def cal_b_speed_sync_gravimetric():
+    textmsg("=============================================================")
+    textmsg("  Sub-test B: Speed-Synced Extrusion (Gravimetric)")
+    textmsg("=============================================================")
+    textmsg("  WARNING: This sub-test MOVES THE ROBOT.")
+    textmsg("  Ensure START_POSE and END_POSE are taught and safe.")
+    textmsg("  Ensure catch tray is under the deposition path.")
+    textmsg(str_cat("  EXTRUSION_MULTIPLIER = ", EXTRUSION_MULTIPLIER))
+    textmsg("-------------------------------------------------------------")
+
+    local tcp_speeds = [TCP_SPEED_1, TCP_SPEED_2, TCP_SPEED_3, TCP_SPEED_4]
+
+    local trial = 1
+    while trial <= NUM_TCP_SPEEDS:
+        local speed_m_s = tcp_speeds[trial - 1]
+        local speed_mm_s = speed_m_s * 1000.0
+
+        textmsg(str_cat("--- Trial ", trial, " of ", NUM_TCP_SPEEDS, " ---"))
+        textmsg(str_cat("  TCP speed: ", speed_mm_s, " mm/s"))
+        textmsg("  ACTION: Tare scale, position catch tray. 3s to start...")
+        sleep(3.0)
+
+        # Check system
+        if is_stepper_fault():
+            textmsg(str_cat("ERROR: Fault before trial ", trial, " -- aborting."))
+            init_registers()
+            return
+        end
+
+        # Move to start
+        textmsg("  Moving to start pose...")
+        init_registers()
+        movej(START_POSE, a=0.5, v=0.25)
+        sleep(1.0)
+
+        # Speed-synced extrusion
+        textmsg(str_cat("  Extruding along path at ", speed_mm_s, " mm/s..."))
+        extrude_along_path(END_POSE, speed_m_s, 0.5)
+
+        # Retract
+        textmsg("  Retracting 2.0 mm at 10.0 mm/s...")
+        retract(2.0, 10.0)
+        sleep(SETTLE_TIME)
+
+        textmsg("  ACTION: Read scale and record mass on data sheet.")
+        textmsg(str_cat("  DATA: trial=", trial, " tcp_speed=", speed_mm_s, " multiplier=", EXTRUSION_MULTIPLIER))
+
+        if trial < NUM_TCP_SPEEDS:
+            textmsg(str_cat("  Pausing ", INTER_TRIAL_PAUSE, " s..."))
+            sleep(INTER_TRIAL_PAUSE)
+        end
+
+        trial = trial + 1
+    end
+
+    init_registers()
+    textmsg("=============================================================")
+    textmsg("  Sub-test B COMPLETE")
+    textmsg("  Dispensed mass should be CONSISTENT across TCP speeds")
+    textmsg("  (speed-sync adjusts rate to compensate).")
+    textmsg("  If mass varies with speed, adjust EXTRUSION_MULTIPLIER")
+    textmsg("  or investigate latency compensation.")
+    textmsg("=============================================================")
+    sleep(2.0)
+end
+
+# ===================================================================
+# Sub-test C: Retraction Effectiveness
+# ===================================================================
+def cal_c_retraction():
+    textmsg("=============================================================")
+    textmsg("  Sub-test C: Retraction Effectiveness")
+    textmsg("=============================================================")
+    textmsg(str_cat("  Extrude speed: ", RETRACT_EXTRUDE_SPEED, " mm/s"))
+    textmsg(str_cat("  Extrude time:  ", RETRACT_EXTRUDE_TIME, " s"))
+    textmsg(str_cat("  Observe time:  ", RETRACT_OBSERVE_TIME, " s"))
+    textmsg(str_cat("  Number of trials: ", NUM_RETRACT_TRIALS))
+    textmsg("  OPERATOR: Record drip time and drip mass for each trial.")
+    textmsg("-------------------------------------------------------------")
+
+    # Retraction parameters stored as parallel arrays
+    local distances = [RETRACT_DIST_1, RETRACT_DIST_2, RETRACT_DIST_3, RETRACT_DIST_4, RETRACT_DIST_5, RETRACT_DIST_6]
+    local speeds = [RETRACT_SPD_1, RETRACT_SPD_2, RETRACT_SPD_3, RETRACT_SPD_4, RETRACT_SPD_5, RETRACT_SPD_6]
+
+    local trial = 1
+    while trial <= NUM_RETRACT_TRIALS:
+        local dist = distances[trial - 1]
+        local spd = speeds[trial - 1]
+
+        textmsg(str_cat("--- Trial ", trial, " of ", NUM_RETRACT_TRIALS, " ---"))
+        if dist == 0.0:
+            textmsg("  Retraction: NONE (baseline, no retraction)")
+        else:
+            textmsg(str_cat("  Retraction: ", dist, " mm at ", spd, " mm/s"))
+        end
+        textmsg("  ACTION: Tare scale, position catch tray. 3s to start...")
+        sleep(3.0)
+
+        # Check system
+        if is_stepper_fault():
+            textmsg(str_cat("ERROR: Fault before trial ", trial, " -- aborting."))
+            init_registers()
+            return
+        end
+
+        # Extrude at fixed rate for set duration
+        textmsg(str_cat("  EXTRUDING at ", RETRACT_EXTRUDE_SPEED, " mm/s for ", RETRACT_EXTRUDE_TIME, " s..."))
+        set_extrusion_enable(True)
+        set_extrusion_mode(1)
+        set_extrusion_rate(RETRACT_EXTRUDE_SPEED)
+        sleep(RETRACT_EXTRUDE_TIME)
+
+        # Stop extrusion
+        set_extrusion_mode(0)
+        set_extrusion_enable(False)
+
+        # Apply retraction (if nonzero)
+        if dist > 0.0:
+            textmsg(str_cat("  RETRACTING ", dist, " mm at ", spd, " mm/s..."))
+            retract(dist, spd)
+        else:
+            textmsg("  NO RETRACTION (baseline)")
+        end
+
+        # Observe drip behavior
+        textmsg(str_cat("  OBSERVING for ", RETRACT_OBSERVE_TIME, " s -- time drip and record mass..."))
+        sleep(RETRACT_OBSERVE_TIME)
+
+        textmsg("  ACTION: Record drip time, drip mass, and air ingestion (Y/N).")
+        if dist == 0.0:
+            textmsg(str_cat("  DATA: trial=", trial, " retract_dist=0.0 retract_spd=0.0"))
+        else:
+            textmsg(str_cat("  DATA: trial=", trial, " retract_dist=", dist, " retract_spd=", spd))
+        end
+
+        if trial < NUM_RETRACT_TRIALS:
+            textmsg(str_cat("  Pausing ", INTER_TRIAL_PAUSE, " s for motor cooling and reset..."))
+            sleep(INTER_TRIAL_PAUSE)
+        end
+
+        trial = trial + 1
+    end
+
+    init_registers()
+    textmsg("=============================================================")
+    textmsg("  Sub-test C COMPLETE")
+    textmsg("  Select retraction parameters that minimize drip")
+    textmsg("  WITHOUT causing air ingestion into the nozzle.")
+    textmsg("  Update RETRACT_DISTANCE and RETRACT_SPEED in production code.")
+    textmsg("=============================================================")
+    sleep(2.0)
+end
+
+# ===================================================================
+# Sub-test D: Latency Measurement (Software Timing)
+# ===================================================================
+def cal_d_latency():
+    textmsg("=============================================================")
+    textmsg("  Sub-test D: End-to-End Latency Measurement")
+    textmsg("=============================================================")
+    textmsg(str_cat("  Step change: 0 -> ", LATENCY_STEP_SPEED, " mm/s"))
+    textmsg(str_cat("  Detection threshold: ", LATENCY_THRESHOLD, " mm/s"))
+    textmsg(str_cat("  Number of measurements: ", LATENCY_REPEATS))
+    textmsg("  Method: Software timing via sync() cycle counting (~2ms resolution)")
+    textmsg("-------------------------------------------------------------")
+
+    local total_latency = 0.0
+    local min_latency = 99999.0
+    local max_latency = 0.0
+    local latency_values = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    local valid_count = 0
+
+    local rep = 1
+    while rep <= LATENCY_REPEATS:
+        textmsg(str_cat("--- Measurement ", rep, " of ", LATENCY_REPEATS, " ---"))
+
+        # Ensure system is idle
+        init_registers()
+        sleep(0.5)
+
+        # Start extrusion at 0 mm/s (enabled, mode=extrude, rate=0)
+        set_extrusion_enable(True)
+        set_extrusion_mode(1)
+        set_extrusion_rate(0.0)
+        sleep(1.0)
+
+        # Record start time and apply step change
+        local t0 = get_steptime()
+        local cycles = 0
+        set_extrusion_rate(LATENCY_STEP_SPEED)
+
+        # Poll actual rate until it exceeds threshold
+        local detected = False
+        while cycles < LATENCY_MAX_CYCLES:
+            sync()
+            cycles = cycles + 1
+            local rate = get_actual_extrusion_rate()
+            if rate > LATENCY_THRESHOLD:
+                detected = True
+                break
+            end
+        end
+
+        # Compute latency
+        local t1 = get_steptime()
+        local latency_ms = cycles * 2.0    # each sync cycle is ~2ms on UR30
+
+        # Stop extrusion
+        set_extrusion_mode(0)
+        set_extrusion_enable(False)
+
+        if detected:
+            textmsg(str_cat("  Latency: ", latency_ms, " ms (", cycles, " cycles)"))
+            latency_values[rep - 1] = latency_ms
+            total_latency = total_latency + latency_ms
+            valid_count = valid_count + 1
+
+            if latency_ms < min_latency:
+                min_latency = latency_ms
+            end
+            if latency_ms > max_latency:
+                max_latency = latency_ms
+            end
+        else:
+            textmsg(str_cat("  TIMEOUT: actual rate did not exceed threshold in ", LATENCY_MAX_CYCLES, " cycles"))
+            textmsg("  NOTE: Bridge may not be reporting actual_rate (known TODO).")
+            latency_values[rep - 1] = -1.0
+        end
+
+        sleep(0.5)
+        rep = rep + 1
+    end
+
+    # Compute statistics
+    textmsg("-------------------------------------------------------------")
+    textmsg("  LATENCY RESULTS:")
+
+    if valid_count > 0:
+        local mean_latency = total_latency / valid_count
+
+        # Compute standard deviation
+        local sum_sq_diff = 0.0
+        local i = 0
+        while i < LATENCY_REPEATS:
+            if latency_values[i] >= 0.0:
+                local diff = latency_values[i] - mean_latency
+                sum_sq_diff = sum_sq_diff + (diff * diff)
+            end
+            i = i + 1
+        end
+        local std_dev = sqrt(sum_sq_diff / valid_count)
+
+        textmsg(str_cat("  Valid measurements: ", valid_count, " / ", LATENCY_REPEATS))
+        textmsg(str_cat("  Mean latency:  ", mean_latency, " ms"))
+        textmsg(str_cat("  Std deviation: ", std_dev, " ms"))
+        textmsg(str_cat("  Min latency:   ", min_latency, " ms"))
+        textmsg(str_cat("  Max latency:   ", max_latency, " ms"))
+
+        if mean_latency > 20.0:
+            textmsg("  WARNING: Mean latency > 20ms. Investigate bridge/Klipper delays.")
+        else:
+            textmsg("  Latency within expected range (< 20ms).")
+        end
+    else:
+        textmsg("  NO VALID MEASUREMENTS -- actual_rate never exceeded threshold.")
+        textmsg("  Check bridge daemon: actual rate readback may not be implemented.")
+        textmsg("  See bridge_daemon.py TODO on line 298.")
+    end
+
+    init_registers()
+    textmsg("=============================================================")
+    textmsg("  Sub-test D COMPLETE")
+    textmsg("  Compare against ~8ms estimate in docs/latency_analysis.md")
+    textmsg("=============================================================")
+    sleep(2.0)
+end
+
+# ===================================================================
+# Main program
+# ===================================================================
+
+textmsg("=========================================================")
+textmsg("  W26 Cobot Axis -- Pump Calibration Test")
+textmsg("  Date: see teach pendant clock")
+textmsg("  Sub-tests: A (linearity), B (speed-sync), C (retraction), D (latency)")
+textmsg("=========================================================")
+textmsg("")
+textmsg("  Ensure validation test (test_basic.script) has PASSED")
+textmsg("  before running this calibration program.")
+textmsg("")
+textmsg("  Suggested data sheet template:")
+textmsg("  -----------------------------------------------")
+textmsg("  Date: ___  Operator: ___  Paste: ___")
+textmsg("  Paste density: ___ g/mL  Nozzle dia: ___ mm")
+textmsg("  Ambient temp: ___ C")
+textmsg("  -----------------------------------------------")
+textmsg("")
+
+# Safety: ensure clean starting state
+init_registers()
+sleep(0.5)
+
+# System readiness check
+if check_system_ready() == False:
+    textmsg("CALIBRATION ABORTED: System not ready.")
+    init_registers()
+    halt
+end
+
+# Run calibration sub-tests.
+# Comment out individual calls to skip sub-tests as needed.
+
+# Sub-test A: Flow rate vs. stepper speed (no robot motion)
+cal_a_flow_rate_linearity()
+
+# Sub-test B: Speed-synced extrusion with gravimetric check
+# WARNING: Moves the robot. Uncomment after teaching waypoints.
+# cal_b_speed_sync_gravimetric()
+
+# Sub-test C: Retraction effectiveness (no robot motion)
+cal_c_retraction()
+
+# Sub-test D: Latency measurement (no robot motion)
+cal_d_latency()
+
+# ===================================================================
+# Summary
+# ===================================================================
+textmsg("=========================================================")
+textmsg("  CALIBRATION TEST COMPLETE")
+textmsg("=========================================================")
+textmsg("  Post-processing steps:")
+textmsg("  1. From Sub-test A: Plot flow_rate vs. cmd_speed.")
+textmsg("     Compute K_pump = mean(flow_rate / cmd_speed).")
+textmsg("     Set EXTRUSION_MULTIPLIER = desired_bead_area / K_pump.")
+textmsg("  2. From Sub-test B: Verify consistent mass across TCP speeds.")
+textmsg("  3. From Sub-test C: Choose retraction dist/speed that")
+textmsg("     minimizes ooze without air ingestion.")
+textmsg("  4. From Sub-test D: Verify latency < 20ms.")
+textmsg("     If higher, profile bridge daemon and Klipper buffer.")
+textmsg("=========================================================")
+
+# Ensure clean state on exit
+init_registers()

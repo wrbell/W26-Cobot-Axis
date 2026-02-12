@@ -151,8 +151,8 @@ All software in `src/`. Can be developed and tested without physical hardware.
 
 ### URScript (`src/urscript/`)
 - [x] `extrusion_control.script` — helper functions, speed-sync extrusion, retraction, fault checking
-- [ ] **Write test program** — simple linear move with extrusion for initial validation
-- [ ] **Write calibration program** — dispense known volume, measure actual vs commanded for pump characterization
+- [x] `test_basic.script` — system validation test (9 sub-tests: init, enable/disable, extrude, retract, homing, e-stop, speed-sync, fault handling, readback)
+- [x] `test_calibration.script` — pump calibration (4 sub-tests: flow rate linearity, speed-sync gravimetric, retraction effectiveness, latency measurement)
 
 ### Deployment
 - [ ] **Write `requirements.txt`** — Python dependencies (ur-rtde, etc.)
@@ -271,3 +271,5 @@ All software features are being designed before implementation. Design docs in `
 | RTDE client wrapper | `src/bridge/rtde_client.py` | Written |
 | Klipper printer config | `src/klipper/printer.cfg` | Written |
 | URScript extrusion program | `src/urscript/extrusion_control.script` | Written |
+| URScript validation test | `src/urscript/test_basic.script` | Written |
+| URScript calibration test | `src/urscript/test_calibration.script` | Written |

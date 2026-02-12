@@ -1,0 +1,12 @@
+# W26 Cobot Axis -- Bridge Daemon Dependencies
+# Install: pip install -r requirements.txt
+#
+# NOTE: ur-rtde requires C++ build tools and Boost.
+# On Raspberry Pi (ARM), install system packages first:
+#   sudo apt-get install -y build-essential cmake libboost-all-dev
+#
+# If ur-rtde fails to build from source on ARM, the bridge daemon
+# will fall back to stub mode (no robot connection) -- see
+# src/bridge/rtde_client.py for the fallback logic.
+
+ur-rtde>=1.5.7,<2.0

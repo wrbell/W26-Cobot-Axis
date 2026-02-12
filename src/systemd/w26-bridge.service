@@ -1,0 +1,51 @@
+# /etc/systemd/system/w26-bridge.service
+#
+# W26 Cobot Axis -- RTDE-to-Klipper Bridge Daemon
+# Translates UR30 RTDE commands to Klipper stepper commands.
+#
+# Install:
+#   sudo cp w26-bridge.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable w26-bridge.service
+#
+# Logs:
+#   journalctl -u w26-bridge -f
+
+[Unit]
+Description=W26 RTDE-to-Klipper Bridge Daemon
+Documentation=https://github.com/<org>/W26-Cobot-Axis
+After=klipper.service network-online.target
+Wants=network-online.target
+# The bridge needs the klippy UDS to exist. klipper.service
+# creates it a few seconds after starting. The bridge daemon
+# has its own retry loop in _connect_all() that will wait
+# for the socket, so a hard Requires= is not needed.
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/W26-Cobot-Axis/src
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do [ -S /tmp/klippy_uds ] && exit 0; sleep 1; done; echo "Warning: klippy_uds not found after 30s, starting anyway (bridge will retry)" >&2'
+ExecStart=/home/pi/klippy-env/bin/python -m bridge
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Logging -- stdout/stderr go to the journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=w26-bridge
+
+# Environment
+Environment=PYTHONUNBUFFERED=1
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/tmp
+
+[Install]
+WantedBy=multi-user.target

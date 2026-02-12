@@ -1,0 +1,669 @@
+# W26 Cobot Axis — System Validation Test (test_basic.script)
+# Runs on: UR30 teach pendant / controller
+# Purpose: Verify every link in the chain (UR30 -> Pi -> SKR Pico -> stepper)
+#          works correctly. Exercises each register, mode, and fault path.
+#
+# Prerequisites:
+#   - Pi powered, Klipper running and ready
+#   - Bridge daemon running (RTDE connected)
+#   - SKR Pico connected via USB, stepper wired to E-driver
+#   - Robot at safe home position, speed slider at 25-50%
+#   - Teach pendant in manual mode
+#
+# Register mapping (from docs/register_allocation.md):
+#
+# OUTPUT (UR30 -> Pi, written here):
+#   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)
+#   output_double_register_0 = commanded extrusion rate (mm/s)
+#   output_double_register_1 = TCP speed magnitude (mm/s)
+#   output_bit_register_64   = extrusion enable
+#   output_bit_register_65   = emergency stop
+#   output_bit_register_66   = home stepper
+#
+# INPUT (Pi -> UR30, read here):
+#   input_int_register_0     = stepper status (0=idle, 1=running, 2=error, 3=homing)
+#   input_int_register_1     = error code (0=none, 1=comms_lost, 2=stall, 3=thermal)
+#   input_double_register_0  = actual extrusion rate (mm/s)
+#   input_bit_register_64    = stepper ready
+#   input_bit_register_65    = stepper fault
+
+# ===================================================================
+# Configuration
+# ===================================================================
+EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
+MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
+ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
+
+# Sub-test G waypoints — MUST be taught on the physical robot.
+# Replace these placeholder poses with actual taught positions in a safe
+# region of the workspace. Path length should be ~100mm.
+# Format: p[x, y, z, rx, ry, rz] in meters and radians.
+START_POSE = p[0.3, -0.2, 0.1, 0, 3.14, 0]
+END_POSE   = p[0.4, -0.2, 0.1, 0, 3.14, 0]
+
+# Test counters
+global pass_count = 0
+global fail_count = 0
+
+# ===================================================================
+# Helper functions (from extrusion_control.script)
+# ===================================================================
+
+def set_extrusion_mode(mode):
+    # mode: 0=off, 1=extrude, 2=retract
+    write_output_integer_register(0, mode)
+end
+
+def set_extrusion_rate(rate_mm_s):
+    # Clamp to safety limit
+    local clamped = rate_mm_s
+    if clamped > MAX_EXTRUSION_RATE:
+        clamped = MAX_EXTRUSION_RATE
+    end
+    write_output_float_register(0, clamped)
+end
+
+def set_extrusion_enable(enabled):
+    write_output_boolean_register(64, enabled)
+end
+
+def set_estop(active):
+    write_output_boolean_register(65, active)
+end
+
+def set_home_command(active):
+    write_output_boolean_register(66, active)
+end
+
+def update_tcp_speed():
+    local speed_vec = get_actual_tcp_speed()
+    local speed_mag = norm(speed_vec)
+    local speed_mm_s = speed_mag * 1000.0
+    write_output_float_register(1, speed_mm_s)
+    return speed_mm_s
+end
+
+def get_stepper_status():
+    return read_input_integer_register(0)
+end
+
+def get_stepper_error():
+    return read_input_integer_register(1)
+end
+
+def get_actual_extrusion_rate():
+    return read_input_float_register(0)
+end
+
+def is_stepper_ready():
+    return read_input_boolean_register(64)
+end
+
+def is_stepper_fault():
+    return read_input_boolean_register(65)
+end
+
+def wait_for_stepper_ready(timeout_s):
+    local t0 = 0.0
+    while is_stepper_ready() == False:
+        sync()
+        t0 = t0 + get_steptime()
+        if t0 > timeout_s:
+            popup("Stepper not ready -- timeout", error=True)
+            return False
+        end
+    end
+    return True
+end
+
+def init_registers():
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
+    set_extrusion_enable(False)
+    set_estop(False)
+    set_home_command(False)
+    write_output_float_register(1, 0.0)
+end
+
+def extrude_along_path(target_pose, speed, accel):
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_enable(False)
+        return
+    end
+
+    movel(target_pose, a=accel, v=speed)
+
+    while is_steady() == False:
+        local tcp_speed = update_tcp_speed()
+
+        if ENABLE_SPEED_SYNC:
+            local rate = tcp_speed * EXTRUSION_MULTIPLIER
+            set_extrusion_rate(rate)
+        end
+
+        if is_stepper_fault():
+            local err = get_stepper_error()
+            popup(str_cat("Stepper fault: error code ", err), error=True)
+            stopl(2.0)
+            break
+        end
+
+        sync()
+    end
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+def retract(distance_mm, speed_mm_s):
+    set_extrusion_enable(True)
+    set_extrusion_mode(2)
+    set_extrusion_rate(speed_mm_s)
+
+    local retract_time = distance_mm / speed_mm_s
+    sleep(retract_time)
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+# ===================================================================
+# Test utility functions
+# ===================================================================
+
+def log_to_pendant(msg):
+    textmsg(msg)
+end
+
+def assert_status(expected, label):
+    local actual = get_stepper_status()
+    if actual == expected:
+        textmsg(str_cat("PASS: ", label))
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: ", label, " expected=", expected, " got=", actual))
+        fail_count = fail_count + 1
+    end
+end
+
+def assert_ready(expected, label):
+    local actual = is_stepper_ready()
+    if actual == expected:
+        textmsg(str_cat("PASS: ", label))
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: ", label, " expected=", to_str(expected), " got=", to_str(actual)))
+        fail_count = fail_count + 1
+    end
+end
+
+def assert_fault(expected, label):
+    local actual = is_stepper_fault()
+    if actual == expected:
+        textmsg(str_cat("PASS: ", label))
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: ", label, " expected=", to_str(expected), " got=", to_str(actual)))
+        fail_count = fail_count + 1
+    end
+end
+
+def assert_error_code(expected, label):
+    local actual = get_stepper_error()
+    if actual == expected:
+        textmsg(str_cat("PASS: ", label))
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: ", label, " expected=", expected, " got=", actual))
+        fail_count = fail_count + 1
+    end
+end
+
+def status_name(code):
+    # Return human-readable name for stepper status code
+    if code == 0:
+        return "idle"
+    elif code == 1:
+        return "running"
+    elif code == 2:
+        return "error"
+    elif code == 3:
+        return "homing"
+    else:
+        return "unknown"
+    end
+end
+
+def error_name(code):
+    # Return human-readable name for error code
+    if code == 0:
+        return "none"
+    elif code == 1:
+        return "comms_lost"
+    elif code == 2:
+        return "stall_detected"
+    elif code == 3:
+        return "thermal_fault"
+    else:
+        return "unknown"
+    end
+end
+
+# ===================================================================
+# Sub-test A: Register Initialization
+# ===================================================================
+def test_a_register_init():
+    textmsg("=== Sub-test A: Register Initialization ===")
+
+    init_registers()
+    sleep(0.5)
+
+    assert_status(0, "A1: status == idle after init")
+    assert_ready(True, "A2: ready == True after init")
+    assert_fault(False, "A3: fault == False after init")
+    assert_error_code(0, "A4: error_code == 0 after init")
+
+    textmsg("=== Sub-test A complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test B: Enable / Disable
+# ===================================================================
+def test_b_enable_disable():
+    textmsg("=== Sub-test B: Enable / Disable ===")
+
+    # Enable with mode=off should not cause motion
+    set_extrusion_enable(True)
+    sleep(0.2)
+    assert_status(0, "B1: status == idle after enable (mode still off)")
+
+    # Disable should remain idle
+    set_extrusion_enable(False)
+    sleep(0.2)
+    assert_status(0, "B2: status == idle after disable")
+
+    textmsg("=== Sub-test B complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test C: Extrude Mode (Fixed Rate, No Robot Motion)
+# ===================================================================
+def test_c_extrude_fixed_rate():
+    textmsg("=== Sub-test C: Extrude Mode (Fixed Rate) ===")
+
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+    set_extrusion_rate(10.0)
+    textmsg("C: Extruding at 10.0 mm/s for 2.0s...")
+
+    sleep(2.0)
+
+    local status_val = get_stepper_status()
+    local actual_rate = get_actual_extrusion_rate()
+    textmsg(str_cat("C: status=", status_val, " (", status_name(status_val), ")"))
+    textmsg(str_cat("C: actual_rate=", actual_rate, " mm/s (commanded 10.0)"))
+
+    if status_val == 1:
+        textmsg("PASS: C1: status == running during extrusion")
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: C1: status == running expected, got=", status_val))
+        fail_count = fail_count + 1
+    end
+
+    if actual_rate > 0.0:
+        textmsg(str_cat("PASS: C2: actual_rate > 0 (", actual_rate, " mm/s)"))
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: C2: actual_rate > 0 expected, got=", actual_rate))
+        fail_count = fail_count + 1
+    end
+
+    # Stop extrusion
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+    sleep(1.0)
+
+    assert_status(0, "C3: status == idle after stopping extrusion")
+
+    textmsg("=== Sub-test C complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test D: Retract Mode
+# ===================================================================
+def test_d_retract_mode():
+    textmsg("=== Sub-test D: Retract Mode ===")
+
+    set_extrusion_enable(True)
+    set_extrusion_mode(2)
+    set_extrusion_rate(5.0)
+    textmsg("D: Retracting at 5.0 mm/s for 1.0s -- observe stepper direction...")
+
+    sleep(1.0)
+
+    local status_val = get_stepper_status()
+    textmsg(str_cat("D: status=", status_val, " (", status_name(status_val), ")"))
+
+    if status_val == 1:
+        textmsg("PASS: D1: status == running during retraction")
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: D1: status == running expected, got=", status_val))
+        fail_count = fail_count + 1
+    end
+
+    # Stop retraction
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+    sleep(0.5)
+
+    assert_status(0, "D2: status == idle after stopping retraction")
+
+    textmsg("D: OPERATOR CHECK -- Did stepper rotate OPPOSITE to extrude direction?")
+    textmsg("=== Sub-test D complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test E: Homing
+# ===================================================================
+def test_e_homing():
+    textmsg("=== Sub-test E: Homing ===")
+
+    set_home_command(True)
+    sync()
+    set_home_command(False)
+    sleep(0.2)
+
+    local status_val = get_stepper_status()
+    textmsg(str_cat("E: status immediately after home command=", status_val, " (", status_name(status_val), ")"))
+    # Status may be 3 (homing) if caught quickly, or 0 (idle) if already done
+
+    sleep(2.0)
+
+    assert_status(0, "E1: status == idle after homing completes")
+    assert_ready(True, "E2: ready == True after homing completes")
+
+    textmsg("=== Sub-test E complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test F: E-Stop
+# ===================================================================
+def test_f_estop():
+    textmsg("=== Sub-test F: E-Stop ===")
+
+    # Start extrusion
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+    set_extrusion_rate(15.0)
+    textmsg("F: Extruding at 15.0 mm/s -- will trigger e-stop in 1.0s...")
+
+    sleep(1.0)
+
+    local pre_status = get_stepper_status()
+    textmsg(str_cat("F: pre-estop status=", pre_status, " (", status_name(pre_status), ")"))
+
+    # Trigger software e-stop
+    set_estop(True)
+    textmsg("F: E-STOP TRIGGERED")
+    sleep(0.5)
+
+    local post_status = get_stepper_status()
+    local post_error = get_stepper_error()
+    local post_fault = is_stepper_fault()
+    textmsg(str_cat("F: post-estop status=", post_status, " (", status_name(post_status), ")"))
+    textmsg(str_cat("F: post-estop error_code=", post_error, " (", error_name(post_error), ")"))
+    textmsg(str_cat("F: post-estop fault=", to_str(post_fault)))
+
+    if post_status == 2:
+        textmsg("PASS: F1: status == error after e-stop")
+        pass_count = pass_count + 1
+    else:
+        textmsg(str_cat("FAIL: F1: status == error expected, got=", post_status))
+        fail_count = fail_count + 1
+    end
+
+    # Attempt recovery: clear e-stop and reinitialize
+    set_estop(False)
+    init_registers()
+    textmsg("F: E-stop cleared, registers reinitialized. Waiting 2.0s for recovery...")
+    sleep(2.0)
+
+    local recovery_status = get_stepper_status()
+    local recovery_ready = is_stepper_ready()
+    textmsg(str_cat("F: recovery status=", recovery_status, " (", status_name(recovery_status), ")"))
+    textmsg(str_cat("F: recovery ready=", to_str(recovery_ready)))
+
+    if recovery_status == 0:
+        textmsg("PASS: F2: system recovered to idle after e-stop clear")
+        pass_count = pass_count + 1
+    else:
+        textmsg("FAIL: F2: system did NOT recover to idle after e-stop clear")
+        textmsg("NOTE: Klipper may require FIRMWARE_RESTART after e-stop.")
+        textmsg("NOTE: Operator must restart Klipper/bridge before continuing.")
+        fail_count = fail_count + 1
+    end
+
+    textmsg("=== Sub-test F complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test G: Speed-Synchronized Extrusion with Robot Motion
+# ===================================================================
+def test_g_speed_sync():
+    textmsg("=== Sub-test G: Speed-Synchronized Extrusion with Robot Motion ===")
+    textmsg("G: WARNING -- This sub-test moves the robot.")
+    textmsg("G: Ensure START_POSE and END_POSE are taught and collision-free.")
+    textmsg("G: Speed slider should be at 25-50%.")
+
+    # Initialize
+    init_registers()
+
+    # Move robot to start pose (joint move, no extrusion)
+    textmsg("G: Moving to start pose via movej...")
+    movej(START_POSE, a=0.5, v=0.25)
+    sleep(1.0)
+
+    # Speed-synced extrusion along path
+    textmsg("G: Beginning speed-synced extrusion to end pose (50 mm/s, 0.5 m/s^2)...")
+    extrude_along_path(END_POSE, 0.050, 0.5)
+
+    # Read rate after motion completes (should be near zero)
+    local post_rate = get_actual_extrusion_rate()
+    textmsg(str_cat("G: actual rate after motion stopped=", post_rate, " mm/s"))
+
+    # Retract to relieve pressure
+    textmsg("G: Retracting 2.0mm at 10.0 mm/s...")
+    retract(2.0, 10.0)
+    sleep(0.5)
+
+    assert_status(0, "G1: status == idle after extrude_along_path + retract")
+
+    textmsg("G: OPERATOR CHECK -- Did extrusion rate track robot speed?")
+    textmsg("=== Sub-test G complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test H: Fault Handling (Bridge Disconnected)
+# ===================================================================
+def test_h_bridge_disconnect():
+    textmsg("=== Sub-test H: Fault Handling (Bridge Disconnected) ===")
+    textmsg("H: MANUAL STEP -- Stop the bridge daemon on the Pi NOW.")
+    textmsg("H:   Run: sudo systemctl stop bridge")
+    textmsg("H: Then press PLAY to continue this sub-test.")
+
+    # Pause for operator intervention.
+    # The operator must stop the bridge and then resume the program
+    # from the teach pendant.
+    sleep(3.0)
+    textmsg("H: Waiting 3.0s for RTDE timeout...")
+
+    local ready_val = is_stepper_ready()
+    textmsg(str_cat("H: ready flag with bridge stopped=", to_str(ready_val)))
+
+    if ready_val == False:
+        textmsg("PASS: H1: ready == False when bridge is down")
+        pass_count = pass_count + 1
+    else:
+        textmsg("FAIL: H1: ready still True -- RTDE watchdog may not be configured")
+        textmsg("NOTE: Stale register values remain when watchdog is not enabled.")
+        fail_count = fail_count + 1
+    end
+
+    # Test timeout behavior
+    textmsg("H: Testing wait_for_stepper_ready(3.0) -- expect timeout popup...")
+    local wait_result = wait_for_stepper_ready(3.0)
+
+    if wait_result == False:
+        textmsg("PASS: H2: wait_for_stepper_ready correctly timed out")
+        pass_count = pass_count + 1
+    else:
+        textmsg("FAIL: H2: wait_for_stepper_ready did not time out (bridge unexpectedly up?)")
+        fail_count = fail_count + 1
+    end
+
+    # Ask operator to restart bridge
+    textmsg("H: MANUAL STEP -- Restart the bridge daemon on the Pi NOW.")
+    textmsg("H:   Run: sudo systemctl start bridge")
+    textmsg("H: Waiting 5.0s for reconnection...")
+    sleep(5.0)
+
+    local ready_after = is_stepper_ready()
+    textmsg(str_cat("H: ready flag after bridge restart=", to_str(ready_after)))
+
+    if ready_after == True:
+        textmsg("PASS: H3: ready == True after bridge restart")
+        pass_count = pass_count + 1
+    else:
+        textmsg("FAIL: H3: ready still False after bridge restart -- check bridge status")
+        fail_count = fail_count + 1
+    end
+
+    textmsg("=== Sub-test H complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test I: Status Register Readback Display
+# ===================================================================
+def test_i_status_readback():
+    textmsg("=== Sub-test I: Status Register Readback Display ===")
+
+    init_registers()
+    sleep(0.5)
+
+    # Read all input registers in idle state
+    textmsg("--- Idle state readback ---")
+    local st = get_stepper_status()
+    textmsg(str_cat("  status          = ", st, " (", status_name(st), ")"))
+    local er = get_stepper_error()
+    textmsg(str_cat("  error_code      = ", er, " (", error_name(er), ")"))
+    local ar = get_actual_extrusion_rate()
+    textmsg(str_cat("  actual_rate     = ", ar, " mm/s"))
+    local rd = is_stepper_ready()
+    textmsg(str_cat("  ready           = ", to_str(rd)))
+    local ft = is_stepper_fault()
+    textmsg(str_cat("  fault           = ", to_str(ft)))
+
+    # Briefly enable extrusion and re-read
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+    set_extrusion_rate(10.0)
+    sleep(1.0)
+
+    textmsg("--- Running state readback (10 mm/s extrude) ---")
+    st = get_stepper_status()
+    textmsg(str_cat("  status          = ", st, " (", status_name(st), ")"))
+    er = get_stepper_error()
+    textmsg(str_cat("  error_code      = ", er, " (", error_name(er), ")"))
+    ar = get_actual_extrusion_rate()
+    textmsg(str_cat("  actual_rate     = ", ar, " mm/s"))
+    rd = is_stepper_ready()
+    textmsg(str_cat("  ready           = ", to_str(rd)))
+    ft = is_stepper_fault()
+    textmsg(str_cat("  fault           = ", to_str(ft)))
+
+    # Disable and re-read
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+    sleep(1.0)
+
+    textmsg("--- After disable readback ---")
+    st = get_stepper_status()
+    textmsg(str_cat("  status          = ", st, " (", status_name(st), ")"))
+    er = get_stepper_error()
+    textmsg(str_cat("  error_code      = ", er, " (", error_name(er), ")"))
+    ar = get_actual_extrusion_rate()
+    textmsg(str_cat("  actual_rate     = ", ar, " mm/s"))
+    rd = is_stepper_ready()
+    textmsg(str_cat("  ready           = ", to_str(rd)))
+    ft = is_stepper_fault()
+    textmsg(str_cat("  fault           = ", to_str(ft)))
+
+    textmsg("I: No pass/fail -- this sub-test is for operator visibility.")
+    textmsg("=== Sub-test I complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Main program
+# ===================================================================
+
+textmsg("=========================================================")
+textmsg("  W26 Cobot Axis -- System Validation Test")
+textmsg("  Date: see teach pendant clock")
+textmsg("  Sub-tests: A through I")
+textmsg("=========================================================")
+
+# Safety: ensure clean starting state
+init_registers()
+sleep(0.5)
+
+# Run each sub-test in sequence.
+# Comment out individual calls to skip sub-tests as needed.
+
+test_a_register_init()
+test_b_enable_disable()
+test_c_extrude_fixed_rate()
+test_d_retract_mode()
+test_e_homing()
+test_f_estop()
+
+# Sub-test G moves the robot -- uncomment only after teaching waypoints.
+# Ensure START_POSE and END_POSE are set to real, collision-free positions.
+# test_g_speed_sync()
+
+# Sub-test H requires manual intervention (stopping/starting bridge daemon).
+# Uncomment when ready to test fault handling.
+# test_h_bridge_disconnect()
+
+test_i_status_readback()
+
+# ===================================================================
+# Summary
+# ===================================================================
+textmsg("=========================================================")
+textmsg("  VALIDATION TEST SUMMARY")
+textmsg(str_cat("  PASSED: ", pass_count))
+textmsg(str_cat("  FAILED: ", fail_count))
+textmsg(str_cat("  TOTAL:  ", pass_count + fail_count))
+if fail_count == 0:
+    textmsg("  RESULT: ALL TESTS PASSED")
+else:
+    textmsg("  RESULT: SOME TESTS FAILED -- review log above")
+end
+textmsg("=========================================================")
+
+# Ensure clean state on exit
+init_registers()

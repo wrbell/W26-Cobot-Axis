@@ -85,8 +85,8 @@ class RTDEClient:
         """
         Read the current extrusion command registers from the UR30.
 
-        Returns dict with keys matching config.Out field names:
-            mode, extrusion_rate, tcp_speed, enable, estop, home
+        Returns dict with keys:
+            mode, extrusion_rate, tcp_speed, timestamp, enable, estop, home
         """
         if not HAS_UR_RTDE:
             return self._stub_commands()
@@ -95,6 +95,7 @@ class RTDEClient:
             "mode": self._rtde_r.getOutputIntRegister(0),
             "extrusion_rate": self._rtde_r.getOutputDoubleRegister(0),
             "tcp_speed": self._rtde_r.getOutputDoubleRegister(1),
+            "timestamp": self._rtde_r.getTimestamp(),
             "enable": self._rtde_r.getOutputBitRegister(64),
             "estop": self._rtde_r.getOutputBitRegister(65),
             "home": self._rtde_r.getOutputBitRegister(66),
@@ -151,11 +152,16 @@ class RTDEClient:
 
     @staticmethod
     def _stub_commands() -> dict:
-        """Return safe default commands for development/testing."""
+        """Return safe default commands for development/testing.
+
+        The timestamp uses time.monotonic() to simulate an incrementing
+        UR30 controller clock, preventing false watchdog triggers in stub mode.
+        """
         return {
             "mode": config.MODE_OFF,
             "extrusion_rate": 0.0,
             "tcp_speed": 0.0,
+            "timestamp": time.monotonic(),
             "enable": False,
             "estop": False,
             "home": False,
