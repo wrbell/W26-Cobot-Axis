@@ -160,6 +160,22 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [ ] **Write deployment script** — install deps, copy configs, set up Klipper, flash firmware
 - [ ] **Write setup instructions** — step-by-step for reproducing the full software stack on a fresh Pi
 
+### Design Documents — Complete
+All software features are being designed before implementation. Design docs in `docs/design/`.
+
+- [x] **Phase 2 deliverables planning** → `docs/design/phase2_deliverables.md`
+- [x] **Bridge enhancements design** → `docs/design/bridge_enhancements.md`
+- [x] **Testing strategy design** → `docs/design/testing_strategy.md`
+- [x] **Klipper/Moonraker config design** → `docs/design/klipper_config.md`
+- [x] **URScript programs design** → `docs/design/urscript_programs.md`
+- [x] **Deployment design** → `docs/design/deployment.md`
+- [x] **Phase 3 integration plan** → `docs/design/integration_plan.md`
+- [x] **Phase 4 test procedures** → `docs/design/test_procedures.md`
+- [x] **Network architecture** → `docs/design/network_architecture.md`
+- [x] **Phase 2 memo outline** → `docs/design/phase2_memo_outline.md`
+- [x] **Final report outline** → `docs/design/final_report_outline.md`
+- [ ] **Update `docs/pi_power.md`** — fix stale dual-Pi architecture references
+
 ---
 
 ## Phase 3: Build and Additional Design/Analysis (Weeks 9–11, Mar 2–22)
