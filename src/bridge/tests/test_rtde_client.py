@@ -197,7 +197,7 @@ class TestRegisterRead:
         mocks["recv"].getOutputBitRegister.return_value = False
 
         cmd = client.read_commands()
-        assert set(cmd.keys()) == {"mode", "extrusion_rate", "tcp_speed", "enable", "estop", "home"}
+        assert set(cmd.keys()) == {"mode", "extrusion_rate", "tcp_speed", "enable", "estop", "home", "timestamp"}
 
     def test_read_commands_mode_register(self, mocked_client):
         """read_commands() reads mode from int register 0."""

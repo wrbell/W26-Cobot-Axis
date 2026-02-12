@@ -35,17 +35,17 @@ class FakeKlippy:
     def __init__(self, server_socket: socket.socket):
         self.sock = server_socket
         self.sock.settimeout(2.0)
+        self._buf = b""
 
     def recv_request(self, timeout: float = 2.0) -> dict:
         """Read one ETX-delimited JSON request from the client."""
         self.sock.settimeout(timeout)
-        buf = b""
-        while ETX not in buf:
+        while ETX not in self._buf:
             chunk = self.sock.recv(4096)
             if not chunk:
                 raise ConnectionError("Client closed connection")
-            buf += chunk
-        msg_raw, _ = buf.split(ETX, 1)
+            self._buf += chunk
+        msg_raw, self._buf = self._buf.split(ETX, 1)
         return json.loads(msg_raw)
 
     def send_response(self, msg_id: int, result: dict | None = None) -> None:
