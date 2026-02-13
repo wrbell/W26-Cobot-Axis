@@ -38,7 +38,7 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 ## Repository Structure
 
 - `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
-- `src/bridge/tests/` — pytest suite (147 tests across 3 files)
+- `src/bridge/tests/` — pytest suite (156 tests across 3 files)
 - `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
 - `src/urscript/` — URScript programs for UR30 teach pendant
 - `trades/` — Trade studies (comms protocol, MCU platform, Klipper vs Lingua Franca)
@@ -109,7 +109,7 @@ Rough drafts in `docs/phase2/` — content ready to paste into Word and redraw i
 | Pin assignment table (all devices) | `docs/phase2/pin_assignments.md` |
 | Power budget worksheet | `docs/phase2/power_budget.md` |
 | Buck converter selection | `docs/phase2/buck_converter.md` |
-| Bill of materials (~$128, 28 items) | `docs/phase2/bom.md` |
+| Bill of materials (~$183, 28 items) | `docs/phase2/bom.md` |
 
 ## Reference Documents
 

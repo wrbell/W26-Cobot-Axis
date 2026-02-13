@@ -57,8 +57,8 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 |------|--------|
 | **Phase 1: Ideation** | Complete |
 | **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
-| **Software development** | All source code written and unit tested (147 tests passing). Waiting on hardware for integration. |
-| **Phase 2 memo drafts** | 7 rough drafts in `docs/phase2/`: block diagram, circuit schematic, pin table, power budget, buck converter selection, BOM (~$128), and full memo text (~1,400 words). |
+| **Software development** | All source code written and unit tested (156 tests passing, clean lint). Waiting on hardware for integration. |
+| **Phase 2 memo drafts** | 7 rough drafts in `docs/phase2/`: block diagram, circuit schematic, pin table, power budget, buck converter selection, BOM (~$183, most P/Ns verified), and full memo text (~1,400 words). |
 | **Phase 3: Build** | Not started — waiting on hardware receipt |
 | **Phase 4: Test** | Not started — depends on Phase 3 |
 
@@ -76,14 +76,14 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - Circuit schematic — full power distribution (UR30 24V → fuse → TVS → buck → Pi; 24V direct → SKR Pico), signal connections, protection components, wire schedule
 - Pin assignment table — all devices (SKR Pico E-axis, Pi 4B, UR30, switch, buck converter), 14 external wired connections
 - Power budget worksheet — per-device calculations, margin analysis (1.0A typical vs 2.0A budget), thermal considerations
-- Buck converter selection — Pololu D24V22F5 chosen over 5 alternatives, DigiKey P/N 2183-D24V22F5-ND
-- Bill of materials — 28 items, DigiKey/Newark part numbers, ~$128 total estimated cost
+- Buck converter selection — Pololu D24V22F5 chosen over 5 alternatives, DigiKey P/N 2183-2858-ND
+- Bill of materials — 28 items, DigiKey/Newark part numbers, ~$183 total estimated cost (most P/Ns verified)
 - Memo text — all 8 sections (~1,400 words) with all 5 tables, ready to paste into Word
 
 **Source Code (all in `src/`):**
 - Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
 - Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client
-- Unit tests: 147 tests across 3 test files (42 + 34 + 71), all passing
+- Unit tests: 156 tests across 3 test files, all passing, clean ruff lint
 - Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209), `moonraker.conf`, `mainsail.cfg` (pump macros)
 - URScript: extrusion control library, system validation test (9 sub-tests), pump calibration test (4 sub-tests)
 - Deployment: `requirements.txt`, systemd service, 11-step deploy script, full setup guide
@@ -94,7 +94,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - [ ] Redraw block diagram in draw.io/Visio (from rough draft)
 - [ ] Redraw circuit schematic in KiCad/draw.io (from rough draft)
 - [ ] Circuit layout — physical arrangement (Dawood + Willem)
-- [ ] Verify DigiKey/Newark part numbers and stock
+- [x] ~~Verify DigiKey/Newark part numbers and stock~~ — 10 of 14 verified/corrected
 - [ ] Location trade study (Dawood)
 - [ ] Mechanical component sketches (Dawood)
 - [ ] Dawood: write Section 5 (mechanical concept) + Figures 3–4
@@ -171,7 +171,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   │   ├── extrusion_profile.py   # Linear/polynomial/lookup profiles
 │   │   ├── dashboard_client.py    # UR30 Dashboard Server (port 29999)
 │   │   ├── profiles.json          # Pre-defined extrusion profiles
-│   │   └── tests/                 # pytest suite (147 tests)
+│   │   └── tests/                 # pytest suite (156 tests)
 │   │       ├── conftest.py        # Shared fixtures (FakeKlippy, mock sockets)
 │   │       ├── test_klipper_client.py   # 42 tests
 │   │       ├── test_rtde_client.py      # 34 tests
@@ -200,13 +200,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   ├── skr_pico_klipper_setup.md  # Firmware build and flash guide
 │   ├── ur_rtde.md                 # RTDE protocol and register details
 │   ├── pi_power.md                # Power requirements and budget
+│   ├── phase3/                    # Phase 3 progress memo draft
+│   │   └── progress_memo_draft.md # Progress update template with placeholders
 │   ├── phase2/                    # Phase 2 memo rough drafts (7 docs)
 │   │   ├── block_diagram.md       # System block diagram (Mermaid + redraw guide)
 │   │   ├── circuit_schematic.md   # Power distribution + signal connections
 │   │   ├── pin_assignments.md     # All devices, all pins, wiring list
 │   │   ├── power_budget.md        # Per-device calculations + margin analysis
 │   │   ├── buck_converter.md      # Pololu D24V22F5 selection + part numbers
-│   │   ├── bom.md                 # 28-item BOM with DigiKey/Newark P/Ns (~$128)
+│   │   ├── bom.md                 # 28-item BOM with DigiKey/Newark P/Ns (~$183)
 │   │   └── memo_draft.md          # Full memo text (~1,400 words) + all tables
 │   └── design/                    # Software design documents (13 docs)
 │       ├── stepper_driving.md     # How Klipper drives the stepper (consolidated)
@@ -274,7 +276,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | [`docs/phase2/pin_assignments.md`](docs/phase2/pin_assignments.md) | Pin assignments — all devices, 14 external wired connections |
 | [`docs/phase2/power_budget.md`](docs/phase2/power_budget.md) | Power budget — per-device calculations, ~1.0A typical vs 2.0A budget |
 | [`docs/phase2/buck_converter.md`](docs/phase2/buck_converter.md) | Buck converter selection — Pololu D24V22F5, DigiKey P/N |
-| [`docs/phase2/bom.md`](docs/phase2/bom.md) | Bill of materials — 28 items, ~$128 total, DigiKey/Newark P/Ns |
+| [`docs/phase2/bom.md`](docs/phase2/bom.md) | Bill of materials — 28 items, ~$183 total, DigiKey/Newark P/Ns (mostly verified) |
 
 ## Team
 

@@ -112,11 +112,30 @@ UR30  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridge)  ──USB Ser
 - [x] Verify DigiKey/Newark part numbers and stock — 10 of 14 verified/corrected; 2 unverified (MicroSD, USB cable), 2 need final check (wire spools, screw terminals)
 - [ ] Dawood: write Section 5 (mechanical concept) + Figures 3–4
 
-### Phase 2 Submission
-- [ ] **Compile Phase 2 PDF** (≤5 pages)
-- [ ] **One team member edits entire document**
-- [ ] **Submit to instructor** — target Mar 1
-- [ ] Use Microsoft Word via UMich Office 365
+### Phase 2 Submission Checklist (due Mar 1)
+
+**Willem (before Feb 28):**
+- [ ] Redraw block diagram in draw.io or Visio → export as Figure 1
+- [ ] Redraw circuit schematic in KiCad or draw.io → export as Figure 2
+- [ ] Paste memo text from `docs/phase2/memo_draft.md` into Word template
+- [ ] Insert all 5 tables from memo draft
+- [ ] Insert Figures 1–2, add captions
+
+**Dawood (before Feb 28):**
+- [ ] Write Section 5 (mechanical concept, ~150 words)
+- [ ] Create Figure 3 (physical layout sketch) and Figure 4 (mechanical concept)
+- [ ] Location trade study (even a brief rationale is fine for the memo)
+
+**Together (Feb 28 – Mar 1):**
+- [ ] One person edits the entire document for consistency
+- [ ] Verify total page count ≤ 5
+- [ ] Export to PDF, submit to instructor
+
+**Already done (no action needed):**
+- [x] Memo text — 8 sections, ~1,400 words → `docs/phase2/memo_draft.md`
+- [x] BOM with verified part numbers (~$183) → `docs/phase2/bom.md`
+- [x] All electrical docs (pin table, power budget, buck converter)
+- [x] 3 trade studies with scores
 
 ---
 
@@ -211,7 +230,9 @@ All software features are being designed before implementation. Design docs in `
 - [ ] Mount to end effector / robot
 
 ### Phase 3 Deliverable
-- [ ] **Write progress update memorandum** to instructor
+- [x] **Progress memo template** drafted → `docs/phase3/progress_memo_draft.md` (fill in after hardware testing)
+- [ ] **Fill in test results and placeholders** — after bench and integration testing
+- [ ] **Submit progress memorandum** to instructor
 
 ---
 
