@@ -12,9 +12,10 @@
 1. [Overview](#1-overview)
 2. [Register Reference](#2-register-reference)
 3. [Shared Helper Functions](#3-shared-helper-functions)
-4. [Program 1: System Validation Test](#4-program-1-system-validation-test)
-5. [Program 2: Pump Calibration](#5-program-2-pump-calibration)
-6. [Open Questions](#6-open-questions)
+4. [Slicer Integration Pattern](#4-slicer-integration-pattern)
+5. [Program 1: System Validation Test](#5-program-1-system-validation-test)
+6. [Program 2: Pump Calibration](#6-program-2-pump-calibration)
+7. [Open Questions](#7-open-questions)
 
 ---
 
@@ -27,8 +28,9 @@ This document designs two URScript programs that will run on the UR30 teach pend
 | **System Validation Test** | Verify every link in the chain (UR30 -> Pi -> SKR Pico -> stepper) works correctly. Exercises each register, mode, and fault path. |
 | **Pump Calibration** | Characterize pump output vs. stepper speed so we can set `EXTRUSION_MULTIPLIER` and confirm linear flow behavior. |
 
-Both programs reuse the helper functions already defined in `src/urscript/extrusion_control.script`:
+Both programs reuse the helper functions defined in `src/urscript/extrusion_control.script`:
 
+**Register I/O helpers:**
 - `set_extrusion_mode(mode)` -- write mode register (0/1/2)
 - `set_extrusion_rate(rate_mm_s)` -- write commanded rate with safety clamp
 - `set_extrusion_enable(enabled)` -- master enable gate
@@ -42,8 +44,14 @@ Both programs reuse the helper functions already defined in `src/urscript/extrus
 - `is_stepper_fault()` -- read fault flag
 - `wait_for_stepper_ready(timeout_s)` -- blocking wait with timeout
 - `init_registers()` -- zero all output registers
-- `extrude_along_path(target_pose, speed, accel)` -- speed-synced extrusion move
+
+**Primary API (constant-rate, for slicer integration):**
+- `pump_on(rate_mm_s)` -- enable + mode=extrude + set rate + wait for ready
+- `pump_off()` -- mode=off + rate=0 + disable
 - `retract(distance_mm, speed_mm_s)` -- timed retraction
+
+**Advanced (speed-synchronized, for variable-speed paths):**
+- `extrude_along_path(target_pose, speed, accel)` -- speed-synced extrusion move (rate tracks TCP speed)
 
 Neither program attempts collision-prone moves. All robot motion uses slow velocities (<=50 mm/s), low accelerations (<=0.5 m/s^2), and short travel distances within a pre-verified safe workspace.
 
@@ -137,9 +145,82 @@ end
 
 ---
 
-## 4. Program 1: System Validation Test
+## 4. Slicer Integration Pattern
 
-### 4.1 Purpose
+### 4.1 Context
+
+The slicer (Dawood's toolpath generator) outputs URScript files containing hundreds of sequential `mv()` calls at constant velocity, with no extrusion control. The actual slicer output (`src/provided/Mblack0.6mm.script`) contains 776 `movel()` calls at `v=0.06 m/s`. The pump simply needs to run at a fixed rate while the robot follows the slicer path.
+
+### 4.2 Primary API: `pump_on()` / `pump_off()`
+
+These two functions are the main interface for wrapping slicer output:
+
+```
+def pump_on(rate_mm_s):
+    # Enables extrusion, sets mode and rate, waits for stepper ready.
+    # Call once before slicer moves begin.
+end
+
+def pump_off():
+    # Stops extrusion (mode=off, rate=0, disable).
+    # Call after all slicer moves complete.
+    # Does NOT retract -- call retract() separately.
+end
+```
+
+### 4.3 Usage Pattern
+
+To integrate slicer output with pump control:
+
+```
+# Slicer's own move function (copied from slicer output)
+def mv(pose):
+    movel(pose, a=1.2, v=0.06)
+end
+
+init_registers()
+
+# Home the stepper
+set_home_command(True)
+sync()
+set_home_command(False)
+sleep(1.0)
+
+# Travel move to first waypoint (no extrusion)
+movej(start_joint_config, a=1.2, v=0.06)
+
+# === Extrusion block ===
+pump_on(10.0)           # constant rate -- tune via calibration Sub-test A/B2
+mv(waypoint_1)          # slicer-generated
+mv(waypoint_2)
+# ... 776 slicer moves ...
+mv(waypoint_N)
+pump_off()
+
+# Anti-ooze retraction
+retract(2.0, 10.0)
+
+init_registers()
+```
+
+### 4.4 When to Use `extrude_along_path()` Instead
+
+`extrude_along_path()` is retained for scenarios where:
+- TCP speed varies along the path (acceleration/deceleration phases)
+- Bead width must stay constant regardless of robot speed
+- The path is a single `movel()` segment, not hundreds of slicer waypoints
+
+For constant-velocity slicer output (where all `mv()` calls use the same `v=`), `pump_on()`/`pump_off()` is simpler and avoids the per-cycle speed-sync overhead.
+
+### 4.5 Bridge Daemon Compatibility
+
+No bridge daemon changes are needed. The bridge already handles constant-rate extrusion: when the UR30 writes `mode=1` + `rate=X` + `enable=True`, the bridge translates this into a Klipper `MANUAL_STEPPER MOVE` command at the requested rate. The `pump_on()`/`pump_off()` functions simply set these registers in the correct sequence.
+
+---
+
+## 5. Program 1: System Validation Test
+
+### 6.1 Purpose
 
 Confirm the full communication chain is operational before running real deposition paths. The test exercises every output register, reads back every input register, and verifies the system responds correctly to each command type including fault conditions.
 
@@ -151,7 +232,7 @@ A successful run means:
 - Status feedback propagates back from Klipper through the bridge to the UR30.
 - E-stop, enable/disable, and homing work as designed.
 
-### 4.2 Prerequisites
+### 6.2 Prerequisites
 
 | Requirement | How to Verify |
 |-------------|--------------|
@@ -164,7 +245,7 @@ A successful run means:
 | Robot in a safe configuration | Robot at a known home position, workspace clear, speed slider at 25-50% |
 | Teach pendant in manual mode | Allows single-step execution and easy stop |
 
-### 4.3 Procedure
+### 6.3 Procedure
 
 The test is divided into sub-tests. Each sub-test is independent so the operator can skip or re-run individual sections. Between each sub-test there is a 1-second pause for the operator to observe teach pendant output.
 
@@ -270,28 +351,38 @@ The test is divided into sub-tests. Each sub-test is independent so the operator
 
 **Important note on recovery:** The current bridge implementation calls `klipper.emergency_stop()` on e-stop, which puts Klipper into a shutdown state requiring a `FIRMWARE_RESTART` to recover. This sub-test documents whether the operator must manually restart Klipper/bridge after an e-stop. If so, the remaining sub-tests cannot continue without intervention.
 
-#### Sub-test G: Speed-Synchronized Extrusion with Robot Motion
+#### Sub-test G: Constant-Rate Extrusion During Multi-Waypoint Path
 
-**What it checks:** The full speed-sync loop -- robot moves, TCP speed is written to the register, and extrusion rate tracks proportionally.
+**What it checks:** The slicer integration pattern -- `pump_on()` starts constant-rate extrusion, the robot executes multiple waypoints, then `pump_off()` stops extrusion.
 
-**Waypoints:** Two waypoints are needed, defining a short linear path in a safe region of the workspace. These must be taught on the physical robot and will vary per installation. The design specifies placeholder poses.
+**Waypoints:** Three waypoints (start, mid, end) defining a two-segment path in a safe region. These must be taught on the physical robot.
 
-1. Define `start_pose` and `end_pose` (linear path, ~100mm long).
+1. Define `start_pose`, `mid_pose`, and `end_pose` (~100mm total path).
 2. `init_registers()`.
 3. Move robot to `start_pose` with `movej()` (joint move, no extrusion).
 4. Wait 1.0s.
-5. Call `extrude_along_path(end_pose, 0.050, 0.5)` (50 mm/s, 0.5 m/s^2 accel).
-6. During motion, the `extrude_along_path` function:
-   - Writes TCP speed to `output_double_register_1` each cycle.
-   - Computes `rate = tcp_speed * EXTRUSION_MULTIPLIER` and writes to `output_double_register_0`.
-   - Checks for stepper faults.
-7. After motion completes, read `get_actual_extrusion_rate()` -- should be near zero (robot stopped).
-8. Call `retract(2.0, 10.0)` -- 2mm retraction at 10 mm/s.
-9. Wait 0.5s.
-10. Assert `status == 0`.
-11. Log PASS/FAIL.
+5. Call `pump_on(10.0)` -- constant rate 10 mm/s.
+6. `movel(mid_pose, ...)` then `movel(end_pose, ...)`.
+7. Read `get_stepper_status()` and `get_actual_extrusion_rate()` during path.
+8. Call `pump_off()`.
+9. Wait 0.5s, read rate (should be near zero).
+10. Call `retract(2.0, 10.0)`.
+11. Assert `status == 0`.
 
-**Expected result:** Stepper speed ramps up as robot accelerates, holds steady during constant velocity, and ramps down as robot decelerates. If a pump is attached, paste dispenses during the move and retracts at the end.
+**Expected result:** Pump runs at a steady 10 mm/s throughout the multi-waypoint path. After `pump_off()`, status returns to idle. This matches how slicer-generated toolpaths will be integrated.
+
+#### Sub-test G2: Speed-Synchronized Extrusion (Advanced)
+
+**What it checks:** The speed-sync loop via `extrude_along_path()` -- robot moves, TCP speed is written to the register, and extrusion rate tracks proportionally. Retained for scenarios where TCP speed varies and extrusion must track.
+
+1. `init_registers()`.
+2. Move robot to `start_pose` with `movej()`.
+3. Call `extrude_along_path(end_pose, 0.050, 0.5)`.
+4. After motion, read rate (should be near zero).
+5. Call `retract(2.0, 10.0)`.
+6. Assert `status == 0`.
+
+**Expected result:** Stepper speed tracks robot speed during the move.
 
 #### Sub-test H: Fault Handling (Bridge Disconnected)
 
@@ -329,7 +420,7 @@ The test is divided into sub-tests. Each sub-test is independent so the operator
 
 **Expected result:** Values change as expected between idle and running states. This sub-test is primarily for operator visibility -- it does not assert pass/fail but gives confidence that all registers are accessible.
 
-### 4.4 Safety
+### 6.4 Safety
 
 | Concern | Mitigation |
 |---------|-----------|
@@ -340,7 +431,7 @@ The test is divided into sub-tests. Each sub-test is independent so the operator
 | Operator in workspace | Run in manual mode (reduced speed, 3-position enabling device required). |
 | Bridge crash during motion | `extrude_along_path()` checks `is_stepper_fault()` each cycle and calls `stopl()` on fault. |
 
-### 4.5 Data Collection
+### 6.5 Data Collection
 
 The test program writes results to the teach pendant log via `textmsg()`. The operator can:
 
@@ -348,7 +439,7 @@ The test program writes results to the teach pendant log via `textmsg()`. The op
 2. **Export logs:** UR controller logs are accessible via SSH at `/programs/log/` or via the Dashboard Server.
 3. **Summary:** Count PASS vs. FAIL lines. All sub-tests must pass for system validation.
 
-### 4.6 Failure Modes
+### 5.6 Failure Modes
 
 | Symptom | Likely Cause | Diagnostic Steps |
 |---------|-------------|-----------------|
@@ -363,9 +454,9 @@ The test program writes results to the teach pendant log via `textmsg()`. The op
 
 ---
 
-## 5. Program 2: Pump Calibration
+## 6. Program 2: Pump Calibration
 
-### 5.1 Purpose
+### 6.1 Purpose
 
 Characterize the pump so we can set `EXTRUSION_MULTIPLIER` (in both `src/urscript/extrusion_control.script` and `src/bridge/config.py`). This program produces the data needed to answer:
 
@@ -374,7 +465,7 @@ Characterize the pump so we can set `EXTRUSION_MULTIPLIER` (in both `src/urscrip
 3. **How effective is retraction at stopping flow?** What retraction distance and speed minimize ooze?
 4. **What is the actual end-to-end latency?** How long after a speed command does the flow rate visibly change?
 
-### 5.2 Prerequisites
+### 6.2 Prerequisites
 
 All prerequisites from the validation test, plus:
 
@@ -388,7 +479,7 @@ All prerequisites from the validation test, plus:
 | Clean nozzle tip | Ensure consistent bead formation |
 | System validation test (Program 1) passed | Full chain verified operational |
 
-### 5.3 Procedure
+### 6.3 Procedure
 
 #### Sub-test A: Flow Rate vs. Stepper Speed (Linearity)
 
@@ -521,7 +612,7 @@ Method 1 is available immediately (no extra hardware). Method 2 is planned for P
 
 **Expected result (Method 2):** Latency of 5-20ms for the first step pulse, plus ~100ms for steady-state speed if Klipper's lookahead buffer is full. During continuous streaming (steady-state operation), speed changes should propagate within ~8ms.
 
-### 5.4 Safety
+### 6.4 Safety
 
 All safety mitigations from the validation test apply, plus:
 
@@ -532,7 +623,7 @@ All safety mitigations from the validation test apply, plus:
 | Hot paste (if heated) | Wear appropriate PPE. Ensure tray can handle paste temperature. |
 | Repeated start/stop cycling | Sub-test C cycles the pump 6 times. Allow 5s between trials for motor/driver cooling. Monitor TMC2209 temperature if StallGuard feedback is available. |
 
-### 5.5 Data Collection
+### 6.5 Data Collection
 
 Calibration data is collected in two ways:
 
@@ -582,7 +673,7 @@ Trial | Latency (ms)
 Mean: _____ ms   Std Dev: _____ ms
 ```
 
-### 5.6 Expected Results and Using the Data
+### 6.6 Expected Results and Using the Data
 
 #### Determining EXTRUSION_MULTIPLIER
 
@@ -625,7 +716,7 @@ From Sub-test D, compare measured latency against the ~8ms estimate in `docs/lat
 - Klipper lookahead buffer size
 - USB serial throughput
 
-### 5.7 Failure Modes
+### 6.7 Failure Modes
 
 | Symptom | Likely Cause | Diagnostic Steps |
 |---------|-------------|-----------------|
@@ -640,7 +731,7 @@ From Sub-test D, compare measured latency against the ~8ms estimate in `docs/lat
 
 ---
 
-## 6. Open Questions
+## 7. Open Questions
 
 These items need resolution before or during implementation:
 

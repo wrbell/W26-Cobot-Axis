@@ -85,11 +85,19 @@ LATENCY_THRESHOLD = 1.0       # mm/s threshold to detect rate change
 LATENCY_REPEATS = 10           # number of latency measurements
 LATENCY_MAX_CYCLES = 500       # max sync cycles to wait (1.0s at 2ms/cycle)
 
-# Sub-test B and G waypoints -- MUST be taught on the physical robot.
+# Sub-test B/B2 waypoints -- MUST be taught on the physical robot.
 # Replace these placeholder poses with actual taught positions.
 # Path should be a straight line of known length (measure with ruler).
 START_POSE = p[0.3, -0.2, 0.1, 0, 3.14, 0]
+MID_POSE   = p[0.35, -0.2, 0.1, 0, 3.14, 0]
 END_POSE   = p[0.4, -0.2, 0.1, 0, 3.14, 0]
+
+# Constant-rate test speeds for Sub-test B2 (mm/s)
+NUM_CONST_RATES = 4
+CONST_RATE_1 = 5.0
+CONST_RATE_2 = 10.0
+CONST_RATE_3 = 20.0
+CONST_RATE_4 = 30.0
 
 # ===================================================================
 # Helper functions (from extrusion_control.script)
@@ -199,6 +207,24 @@ def extrude_along_path(target_pose, speed, accel):
     end
 
     set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+def pump_on(rate_mm_s):
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+    set_extrusion_rate(rate_mm_s)
+
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_mode(0)
+        set_extrusion_enable(False)
+        popup("pump_on: stepper not ready", error=True)
+    end
+end
+
+def pump_off():
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
     set_extrusion_enable(False)
 end
 
@@ -412,6 +438,75 @@ def cal_b_speed_sync_gravimetric():
     textmsg("  (speed-sync adjusts rate to compensate).")
     textmsg("  If mass varies with speed, adjust EXTRUSION_MULTIPLIER")
     textmsg("  or investigate latency compensation.")
+    textmsg("=============================================================")
+    sleep(2.0)
+end
+
+# ===================================================================
+# Sub-test B2: Constant-Rate Extrusion During Multi-Waypoint Path
+# ===================================================================
+def cal_b2_constant_rate_gravimetric():
+    textmsg("=============================================================")
+    textmsg("  Sub-test B2: Constant-Rate Extrusion (Gravimetric)")
+    textmsg("=============================================================")
+    textmsg("  WARNING: This sub-test MOVES THE ROBOT.")
+    textmsg("  Ensure START_POSE, MID_POSE, and END_POSE are taught and safe.")
+    textmsg("  This tests the slicer integration pattern: pump_on -> moves -> pump_off")
+    textmsg("-------------------------------------------------------------")
+
+    local rates = [CONST_RATE_1, CONST_RATE_2, CONST_RATE_3, CONST_RATE_4]
+
+    local trial = 1
+    while trial <= NUM_CONST_RATES:
+        local rate = rates[trial - 1]
+
+        textmsg(str_cat("--- Trial ", trial, " of ", NUM_CONST_RATES, " ---"))
+        textmsg(str_cat("  Constant extrusion rate: ", rate, " mm/s"))
+        textmsg("  ACTION: Tare scale, position catch tray. 3s to start...")
+        sleep(3.0)
+
+        # Check system
+        if is_stepper_fault():
+            textmsg(str_cat("ERROR: Fault before trial ", trial, " -- aborting."))
+            init_registers()
+            return
+        end
+
+        # Move to start
+        textmsg("  Moving to start pose...")
+        init_registers()
+        movej(START_POSE, a=0.5, v=0.25)
+        sleep(1.0)
+
+        # Constant-rate extrusion through waypoints
+        textmsg(str_cat("  pump_on(", rate, ") -- extruding through path..."))
+        pump_on(rate)
+        movel(MID_POSE, a=0.5, v=0.050)
+        movel(END_POSE, a=0.5, v=0.050)
+        pump_off()
+
+        # Retract
+        textmsg("  Retracting 2.0 mm at 10.0 mm/s...")
+        retract(2.0, 10.0)
+        sleep(SETTLE_TIME)
+
+        textmsg("  ACTION: Read scale and record mass on data sheet.")
+        textmsg(str_cat("  DATA: trial=", trial, " const_rate=", rate, " mm/s"))
+
+        if trial < NUM_CONST_RATES:
+            textmsg(str_cat("  Pausing ", INTER_TRIAL_PAUSE, " s..."))
+            sleep(INTER_TRIAL_PAUSE)
+        end
+
+        trial = trial + 1
+    end
+
+    init_registers()
+    textmsg("=============================================================")
+    textmsg("  Sub-test B2 COMPLETE")
+    textmsg("  Dispensed mass should scale linearly with pump rate")
+    textmsg("  (path length and velocity are constant across trials).")
+    textmsg("  Use results to select optimal constant rate for slicer paths.")
     textmsg("=============================================================")
     sleep(2.0)
 end
@@ -634,7 +729,7 @@ end
 textmsg("=========================================================")
 textmsg("  W26 Cobot Axis -- Pump Calibration Test")
 textmsg("  Date: see teach pendant clock")
-textmsg("  Sub-tests: A (linearity), B (speed-sync), C (retraction), D (latency)")
+textmsg("  Sub-tests: A (linearity), B (speed-sync), B2 (constant-rate), C (retraction), D (latency)")
 textmsg("=========================================================")
 textmsg("")
 textmsg("  Ensure validation test (test_basic.script) has PASSED")
@@ -669,6 +764,10 @@ cal_a_flow_rate_linearity()
 # WARNING: Moves the robot. Uncomment after teaching waypoints.
 # cal_b_speed_sync_gravimetric()
 
+# Sub-test B2: Constant-rate extrusion through multi-waypoint path
+# WARNING: Moves the robot. Uncomment after teaching waypoints.
+# cal_b2_constant_rate_gravimetric()
+
 # Sub-test C: Retraction effectiveness (no robot motion)
 cal_c_retraction()
 
@@ -686,6 +785,7 @@ textmsg("  1. From Sub-test A: Plot flow_rate vs. cmd_speed.")
 textmsg("     Compute K_pump = mean(flow_rate / cmd_speed).")
 textmsg("     Set EXTRUSION_MULTIPLIER = desired_bead_area / K_pump.")
 textmsg("  2. From Sub-test B: Verify consistent mass across TCP speeds.")
+textmsg("     From Sub-test B2: Verify mass scales with pump rate.")
 textmsg("  3. From Sub-test C: Choose retraction dist/speed that")
 textmsg("     minimizes ooze without air ingestion.")
 textmsg("  4. From Sub-test D: Verify latency < 20ms.")

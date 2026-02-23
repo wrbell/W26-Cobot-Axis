@@ -36,9 +36,10 @@ ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
 
 # Sub-test G waypoints — MUST be taught on the physical robot.
 # Replace these placeholder poses with actual taught positions in a safe
-# region of the workspace. Path length should be ~100mm.
+# region of the workspace. Total path length should be ~100mm.
 # Format: p[x, y, z, rx, ry, rz] in meters and radians.
 START_POSE = p[0.3, -0.2, 0.1, 0, 3.14, 0]
+MID_POSE   = p[0.35, -0.2, 0.1, 0, 3.14, 0]
 END_POSE   = p[0.4, -0.2, 0.1, 0, 3.14, 0]
 
 # Test counters
@@ -155,6 +156,24 @@ def extrude_along_path(target_pose, speed, accel):
     end
 
     set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+def pump_on(rate_mm_s):
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)
+    set_extrusion_rate(rate_mm_s)
+
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_mode(0)
+        set_extrusion_enable(False)
+        popup("pump_on: stepper not ready", error=True)
+    end
+end
+
+def pump_off():
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
     set_extrusion_enable(False)
 end
 
@@ -458,13 +477,14 @@ def test_f_estop():
 end
 
 # ===================================================================
-# Sub-test G: Speed-Synchronized Extrusion with Robot Motion
+# Sub-test G: Constant-Rate Extrusion During Multi-Waypoint Path
 # ===================================================================
-def test_g_speed_sync():
-    textmsg("=== Sub-test G: Speed-Synchronized Extrusion with Robot Motion ===")
+def test_g_constant_rate():
+    textmsg("=== Sub-test G: Constant-Rate Extrusion During Multi-Waypoint Path ===")
     textmsg("G: WARNING -- This sub-test moves the robot.")
-    textmsg("G: Ensure START_POSE and END_POSE are taught and collision-free.")
+    textmsg("G: Ensure START_POSE, MID_POSE, and END_POSE are taught and collision-free.")
     textmsg("G: Speed slider should be at 25-50%.")
+    textmsg("G: Tests the slicer integration pattern: pump_on -> moves -> pump_off")
 
     # Initialize
     init_registers()
@@ -474,23 +494,72 @@ def test_g_speed_sync():
     movej(START_POSE, a=0.5, v=0.25)
     sleep(1.0)
 
-    # Speed-synced extrusion along path
-    textmsg("G: Beginning speed-synced extrusion to end pose (50 mm/s, 0.5 m/s^2)...")
-    extrude_along_path(END_POSE, 0.050, 0.5)
+    # Constant-rate extrusion across multiple waypoints
+    textmsg("G: pump_on(10.0) -- starting constant-rate extrusion at 10 mm/s...")
+    pump_on(10.0)
 
-    # Read rate after motion completes (should be near zero)
+    textmsg("G: Moving through waypoints (START -> MID -> END)...")
+    movel(MID_POSE, a=0.5, v=0.050)
+    movel(END_POSE, a=0.5, v=0.050)
+
+    # Check that stepper is running mid-path
+    local mid_status = get_stepper_status()
+    local mid_rate = get_actual_extrusion_rate()
+    textmsg(str_cat("G: status during path=", mid_status, " actual_rate=", mid_rate, " mm/s"))
+
+    textmsg("G: pump_off() -- stopping extrusion...")
+    pump_off()
+
+    # Read rate after stop (should be near zero)
+    sleep(0.5)
     local post_rate = get_actual_extrusion_rate()
-    textmsg(str_cat("G: actual rate after motion stopped=", post_rate, " mm/s"))
+    textmsg(str_cat("G: actual rate after pump_off=", post_rate, " mm/s"))
 
     # Retract to relieve pressure
     textmsg("G: Retracting 2.0mm at 10.0 mm/s...")
     retract(2.0, 10.0)
     sleep(0.5)
 
-    assert_status(0, "G1: status == idle after extrude_along_path + retract")
+    assert_status(0, "G1: status == idle after pump_on/off + retract")
 
-    textmsg("G: OPERATOR CHECK -- Did extrusion rate track robot speed?")
+    textmsg("G: OPERATOR CHECK -- Did pump run at constant rate during the path?")
     textmsg("=== Sub-test G complete ===")
+    sleep(1.0)
+end
+
+# ===================================================================
+# Sub-test G2: Speed-Synchronized Extrusion (Advanced)
+# ===================================================================
+def test_g2_speed_sync():
+    textmsg("=== Sub-test G2: Speed-Synchronized Extrusion (Advanced) ===")
+    textmsg("G2: WARNING -- This sub-test moves the robot.")
+    textmsg("G2: Tests extrude_along_path() where rate tracks TCP speed.")
+
+    # Initialize
+    init_registers()
+
+    # Move robot to start pose (joint move, no extrusion)
+    textmsg("G2: Moving to start pose via movej...")
+    movej(START_POSE, a=0.5, v=0.25)
+    sleep(1.0)
+
+    # Speed-synced extrusion along path
+    textmsg("G2: Beginning speed-synced extrusion to end pose (50 mm/s, 0.5 m/s^2)...")
+    extrude_along_path(END_POSE, 0.050, 0.5)
+
+    # Read rate after motion completes (should be near zero)
+    local post_rate = get_actual_extrusion_rate()
+    textmsg(str_cat("G2: actual rate after motion stopped=", post_rate, " mm/s"))
+
+    # Retract to relieve pressure
+    textmsg("G2: Retracting 2.0mm at 10.0 mm/s...")
+    retract(2.0, 10.0)
+    sleep(0.5)
+
+    assert_status(0, "G2-1: status == idle after extrude_along_path + retract")
+
+    textmsg("G2: OPERATOR CHECK -- Did extrusion rate track robot speed?")
+    textmsg("=== Sub-test G2 complete ===")
     sleep(1.0)
 end
 
@@ -623,7 +692,7 @@ end
 textmsg("=========================================================")
 textmsg("  W26 Cobot Axis -- System Validation Test")
 textmsg("  Date: see teach pendant clock")
-textmsg("  Sub-tests: A through I")
+textmsg("  Sub-tests: A through I (G2 optional)")
 textmsg("=========================================================")
 
 # Safety: ensure clean starting state
@@ -641,8 +710,11 @@ test_e_homing()
 test_f_estop()
 
 # Sub-test G moves the robot -- uncomment only after teaching waypoints.
-# Ensure START_POSE and END_POSE are set to real, collision-free positions.
-# test_g_speed_sync()
+# Ensure START_POSE, MID_POSE, and END_POSE are set to real, collision-free positions.
+# test_g_constant_rate()
+
+# Sub-test G2: speed-sync mode (advanced) -- uncomment to test extrude_along_path.
+# test_g2_speed_sync()
 
 # Sub-test H requires manual intervention (stopping/starting bridge daemon).
 # Uncomment when ready to test fault handling.

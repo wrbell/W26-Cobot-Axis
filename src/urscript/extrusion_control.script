@@ -23,8 +23,10 @@
 # ===================================================================
 # Configuration — adjust these for your application
 # ===================================================================
-EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
 MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
+
+# Speed-sync configuration (used by extrude_along_path only)
+EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
 ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
 
 # ===================================================================
@@ -113,8 +115,65 @@ def init_registers():
 end
 
 # ===================================================================
-# Main extrusion control
+# Constant-rate extrusion control (primary API)
 # ===================================================================
+# These two functions are the main interface for slicer-generated
+# toolpaths. The pump runs at a fixed rate while the robot executes
+# a sequence of moves, then shuts off at the end.
+#
+# Usage pattern:
+#   init_registers()
+#   pump_on(RATE)
+#   mv(waypoint_1)    # slicer-generated moves
+#   mv(waypoint_2)
+#   ...
+#   pump_off()
+#   retract(2.0, 10.0)
+#   init_registers()
+
+def pump_on(rate_mm_s):
+    # Start constant-rate extrusion. Call once before a sequence of
+    # robot moves. Blocks until the stepper is ready (5s timeout).
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)   # extrude
+    set_extrusion_rate(rate_mm_s)
+
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_mode(0)
+        set_extrusion_enable(False)
+        popup("pump_on: stepper not ready", error=True)
+    end
+end
+
+def pump_off():
+    # Stop extrusion. Call after all robot moves are complete.
+    # Does NOT retract — call retract() separately if needed.
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
+    set_extrusion_enable(False)
+end
+
+def retract(distance_mm, speed_mm_s):
+    # Brief retraction to relieve pressure (anti-ooze)
+    set_extrusion_enable(True)
+    set_extrusion_mode(2)   # retract
+    set_extrusion_rate(speed_mm_s)
+
+    # Wait for the retraction to complete (approximate timing)
+    local retract_time = distance_mm / speed_mm_s
+    sleep(retract_time)
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+# ===================================================================
+# Advanced: Speed-synchronized extrusion
+# ===================================================================
+# Use extrude_along_path() when the extrusion rate must track TCP
+# speed in real time (e.g., variable-speed paths where bead width
+# must stay constant). For constant-velocity slicer output, prefer
+# pump_on/pump_off above.
 
 def extrude_along_path(target_pose, speed, accel):
     # Enable extrusion system
@@ -155,39 +214,37 @@ def extrude_along_path(target_pose, speed, accel):
     set_extrusion_enable(False)
 end
 
-def retract(distance_mm, speed_mm_s):
-    # Brief retraction to relieve pressure (anti-ooze)
-    set_extrusion_enable(True)
-    set_extrusion_mode(2)   # retract
-    set_extrusion_rate(speed_mm_s)
-
-    # Wait for the retraction to complete (approximate timing)
-    local retract_time = distance_mm / speed_mm_s
-    sleep(retract_time)
-
-    set_extrusion_mode(0)
-    set_extrusion_enable(False)
-end
-
 # ===================================================================
-# Example program — replace with actual deposition path
+# Example: Wrapping slicer output with pump control
 # ===================================================================
-
-# Initialize
-init_registers()
-
-# Home the stepper (zero position reference)
-set_home_command(True)
-sync()
-set_home_command(False)
-sleep(1.0)
-
-# Example: extrude along a linear path
-# Replace target_pose with your actual waypoints
-# extrude_along_path(p[0.3, -0.2, 0.1, 0, 3.14, 0], 0.05, 0.5)
-
-# Example: retract 2mm at 10 mm/s after deposition
-# retract(2.0, 10.0)
-
-# Cleanup
-init_registers()
+# The slicer generates a sequence of mv() calls at constant velocity.
+# To add extrusion, wrap the slicer output with pump_on/pump_off:
+#
+#   def mv(pose):
+#       movel(pose, a=1.2, v=0.06)
+#   end
+#
+#   init_registers()
+#
+#   # Home the stepper
+#   set_home_command(True)
+#   sync()
+#   set_home_command(False)
+#   sleep(1.0)
+#
+#   # Move to first waypoint without extruding
+#   movej(start_joint_config, a=1.2, v=0.06)
+#
+#   # Start pump, run slicer path, stop pump
+#   pump_on(10.0)           # 10 mm/s constant rate — tune via calibration
+#   mv(waypoint_1)
+#   mv(waypoint_2)
+#   # ... (slicer-generated mv() calls) ...
+#   mv(waypoint_N)
+#   pump_off()
+#
+#   # Retract to relieve nozzle pressure
+#   retract(2.0, 10.0)
+#
+#   # Cleanup
+#   init_registers()
