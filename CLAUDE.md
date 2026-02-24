@@ -48,6 +48,7 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 - `docs/phase2/` — Phase 2 memo rough drafts (7 docs: block diagram, circuit schematic, pin table, power budget, buck converter, BOM, memo text)
 - `reqs/` — Course requirements, scope, process docs
 - `scripts/` — Deployment and development helper scripts (`dev-sync.sh`)
+- `.github/workflows/` — CI/CD: Tier 1 (lint + test + shellcheck), Tier 2 (firmware cross-compile)
 - `vendor/` — Vendored dependencies (git-ignored, cloned locally)
 - `schedule.md` — Accelerated project schedule (target completion Mar 31, official submission Apr 24)
 - `todo.md` — Master task tracker
@@ -62,6 +63,11 @@ git clone --depth 1 https://github.com/Klipper3d/klipper.git vendor/klipper
 ```
 
 The `vendor/` directory is git-ignored. These local copies let you verify that StallGuard overlay patches (`src/klipper_mods/*.patch`) apply cleanly against the real Klipper source tree.
+
+**Install Python dependencies (dev + runtime):**
+```bash
+pip install -r requirements.txt         # ur-rtde, pytest, ruff
+```
 
 **Running tests and lint:**
 ```bash
@@ -109,6 +115,8 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | StallGuard klippy module | `src/klipper_mods/klippy_extras/stallguard_monitor.py` |
 | Deploy script | `deploy.sh` |
 | Dev sync script | `scripts/dev-sync.sh` |
+| CI workflow (Tier 1) | `.github/workflows/ci.yml` |
+| Firmware build workflow (Tier 2) | `.github/workflows/firmware.yml` |
 
 ## Design Documents
 

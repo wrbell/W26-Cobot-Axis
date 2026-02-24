@@ -59,9 +59,10 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 |------|--------|
 | **Phase 1: Ideation** | Complete |
 | **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
-| **Software development** | All source code written and unit tested (335 tests passing, clean lint). StallGuard dual-core firmware written. Waiting on hardware for integration. |
-| **StallGuard firmware** | Written — RP2040 core1 DIAG pin monitor (C firmware + klippy extras + patches). Verified against real Klipper source tree. |
-| **Deploy tooling** | Written — `deploy.sh` (11-step + StallGuard overlay), `scripts/dev-sync.sh` (fast rsync for iterative dev) |
+| **Software development** | All source code written and unit tested (335 tests across 10 files, clean lint). 7 bridge enhancements + StallGuard firmware. Waiting on hardware for integration. |
+| **CI/CD** | Tier 1 (lint + test + shellcheck on every push) and Tier 2 (firmware cross-compile) GitHub Actions workflows live. |
+| **StallGuard firmware** | Written — RP2040 core1 DIAG pin monitor (C firmware + klippy extras + patches). Verified against real Klipper source tree. All audit issues resolved. |
+| **Deploy tooling** | Written — `deploy.sh` (11-step + StallGuard overlay, cross-platform sed), `scripts/dev-sync.sh` (fast rsync for iterative dev) |
 | **HITL test plan** | Written — `docs/design/hitl_plan.md` with TP-06 StallGuard procedures, URSim dev bench topology, deploy workflow |
 | **Phase 2 memo drafts** | 7 rough drafts in `docs/phase2/` — ready for draw.io/KiCad redraw and Word compilation |
 | **Phase 3: Build** | Not started — hardware arriving soon, deploy tooling ready |
@@ -87,11 +88,13 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 
 **Source Code (all in `src/`):**
 - Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
-- Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client
+- Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client, StallGuard accumulator
 - Unit tests: 335 tests across 10 test files, all passing, clean ruff lint
 - Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209, stallguard_monitor), `moonraker.conf`, `mainsail.cfg` (pump macros)
 - URScript: extrusion control library, system validation test (10 sub-tests), pump calibration test (5 sub-tests)
-- Deployment: `requirements.txt`, systemd service, 11-step deploy script (with StallGuard overlay), full setup guide, dev-sync script
+- Deployment: `requirements.txt` (runtime + dev deps), systemd service (portable `%h` paths), 11-step deploy script (with StallGuard overlay, cross-platform sed), full setup guide, dev-sync script
+- CI/CD: GitHub Actions Tier 1 (ruff + pytest + shellcheck on every push/PR) and Tier 2 (ARM firmware cross-compile on klipper_mods changes)
+- Config validation: 24 tests covering register naming, uniqueness, constant sanity
 
 **StallGuard Dual-Core Firmware (`src/klipper_mods/`):**
 - RP2040 core1 DIAG pin monitor — tight polling loop with debounce, spinlock-protected shared SRAM
@@ -278,7 +281,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 ├── .gitignore                     # Ignores vendor/, __pycache__, .DS_Store, etc.
 ├── deploy.sh                      # 11-step idempotent deployment script (+ StallGuard overlay)
 ├── SETUP.md                       # Fresh Pi setup guide
-└── requirements.txt               # Python dependencies (ur-rtde)
+└── requirements.txt               # Python dependencies (ur-rtde, pytest, ruff)
 ```
 
 ## Key Documents
@@ -288,7 +291,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | Component | Location | Tests |
 |-----------|----------|-------|
 | Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` | 71 tests |
-| Bridge config (registers, constants) | `src/bridge/config.py` | — (constants) |
+| Bridge config (registers, constants) | `src/bridge/config.py` | 24 tests |
 | Klipper Unix socket client | `src/bridge/klipper_client.py` | 42 tests |
 | RTDE client wrapper | `src/bridge/rtde_client.py` | 43 tests |
 | StallGuard status integration | `src/bridge/klipper_status.py` | 25 tests |
@@ -296,7 +299,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | Data logger | `src/bridge/data_logger.py` | 17 tests |
 | Extrusion profiles | `src/bridge/extrusion_profile.py` | 39 tests |
 | Dashboard client | `src/bridge/dashboard_client.py` | 25 tests |
-| StallGuard accumulator | `src/bridge/stallguard_accumulator.py` | 30 tests |
+| StallGuard accumulator | `src/bridge/stallguard_accumulator.py` | 34 tests |
 | Klipper printer config | `src/klipper/printer.cfg` | — (config) |
 | Moonraker config | `src/klipper/moonraker.conf` | — (config) |
 | Mainsail pump macros | `src/klipper/mainsail.cfg` | — (config) |

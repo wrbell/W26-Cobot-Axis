@@ -174,7 +174,7 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] **Unit tests for `data_logger.py`** — 17 tests, CSV columns, file rotation, decimation, annotations, lifecycle
 - [x] **Unit tests for `extrusion_profile.py`** — 39 tests, linear/polynomial/lookup profiles, JSON loading, fallback, edge cases
 - [x] **Unit tests for `dashboard_client.py`** — 25 tests, TCP server mock, status queries, control commands, DashboardPoller
-- [x] **Unit tests for `stallguard_accumulator.py`** — 30 tests, NamedTuple, capacity, overflow, thread safety, stats, poller/bridge wiring
+- [x] **Unit tests for `stallguard_accumulator.py`** — 34 tests, NamedTuple, capacity, overflow, thread safety, stats, CSV dump, poller/bridge wiring
 - [x] **Config validation tests** — 24 tests: register name format, no duplicates, sane constants (`test_config.py`)
 - [ ] **URSim integration testing** — moved to Phase 3 "Pre-Hardware: URSim Validation" section
 
@@ -219,7 +219,7 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] Added ur_rtde installation check in `dev-sync.sh` (warns if bridge will run in stub mode)
 
 ### Deployment — Written
-- [x] `requirements.txt` — Python dependencies (ur-rtde)
+- [x] `requirements.txt` — Python dependencies (ur-rtde, pytest, ruff) with Windows/ARM install notes
 - [x] `src/systemd/w26-bridge.service` — systemd service, auto-start after Klipper
 - [x] `deploy.sh` — 11-step deployment script (deps, configs, firmware, verification) + StallGuard overlay (Step 6b)
 - [x] `scripts/dev-sync.sh` — Fast rsync to Pi for iterative development (<5s)
@@ -279,6 +279,9 @@ Investigate changing StallGuard measurement reporting from live 20 Hz polling to
 - [ ] **(Stretch)** If MCU-side buffering is needed: add 16 KB SRAM ring buffer in `core1_stallguard.c` + `stallguard_dump` command
 - [ ] Evaluate whether 20 Hz polling rate can be reduced (e.g., 5 Hz) to extend buffer duration with same memory
 
+#### Developer Setup
+- [ ] **Install ur-rtde on macOS** — no pre-built wheel on PyPI; needs `brew install cmake boost` then `pip install ur-rtde` from source. Low priority (stub mode works for tests) but needed if testing RTDE against URSim from Mac.
+
 #### Known Audit Issues (not yet fixed — low priority)
 - [x] **deploy.sh uses GNU sed** — added OS detection: `SED_INPLACE` array handles GNU vs BSD sed.
 - [x] **systemd service hardcodes `/home/pi/`** — replaced with `%h` systemd specifier (expands to User= home dir).
@@ -319,7 +322,7 @@ These are known gotchas from the end-to-end audit. Check each before testing.
 - [ ] **Update printer.cfg serial path** — replace `PLACEHOLDER` in `[mcu]` with actual device from `ls /dev/serial/by-id/usb-Klipper_rp2040_*`. deploy.sh does this automatically.
 - [ ] **Verify ur_rtde installed on Pi** — `python -c "import rtde_receive; print('OK')"`. If it fails, bridge runs in stub mode (no real RTDE). ARM binary wheel may need `pip install ur-rtde --no-cache-dir`.
 - [ ] **Verify Klipper socket path** — default `/tmp/klippy_uds` is correct for MainsailOS. Check with `ls -la /tmp/klippy_uds`.
-- [ ] **Verify Pi username is `pi`** — systemd service hardcodes `/home/pi/`. If different, edit `src/systemd/w26-bridge.service` paths.
+- [x] ~~**Verify Pi username is `pi`**~~ — systemd service now uses `%h` specifier (expands to home dir), no longer hardcoded.
 - [ ] **Calibrate motor rotation_distance** — `printer.cfg` uses generic `rotation_distance: 40` (40mm/rev). Measure actual pump displacement per revolution and update.
 
 #### URSim on Windows
