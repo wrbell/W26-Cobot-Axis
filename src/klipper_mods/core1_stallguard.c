@@ -31,7 +31,11 @@
 #define PADS_BANK0_BASE     0x4001C000
 #define SIO_GPIO_IN         (*(volatile uint32_t *)(SIO_BASE + 0x004))
 #define SIO_GPIO_OE_CLR     (*(volatile uint32_t *)(SIO_BASE + 0x028))
-#define TIMER_TIMERAWL      (*(volatile uint32_t *)0x40054028)
+
+/* RP2040 TIMER registers — §4.6.5 of the RP2040 datasheet.
+ * TIMERAWL is the lower 32 bits of the free-running 1 MHz timer. */
+#define TIMER_BASE          0x40054000
+#define TIMER_TIMERAWL      (*(volatile uint32_t *)(TIMER_BASE + 0x28))
 
 /* GPIO function select: SIO = function 5 */
 #define GPIO_FUNC_SIO       5

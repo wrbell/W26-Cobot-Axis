@@ -249,7 +249,7 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] **Install cross-compiler in CI** — `apt install gcc-arm-none-eabi`
 
 #### CI/CD Setup Guide
-- [ ] **Write GitHub Actions setup guide** — document how to enable CI/CD: push to GitHub, verify workflows trigger, badge shows green, explain Tier 1 vs Tier 2 vs Tier 3, how to read build results and artifacts
+- [x] **Write GitHub Actions setup guide** → `docs/design/ci_cd_guide.md` — prerequisites, Tier 1 vs 2 vs 3, verifying workflows, reading build results, downloading firmware artifacts, manual trigger, troubleshooting
 
 #### Tier 3: Deploy-to-Pi (manual trigger or tagged release)
 - [ ] **Add deploy workflow** — manual dispatch or on `v*` tag
@@ -287,7 +287,7 @@ Investigate changing StallGuard measurement reporting from live 20 Hz polling to
 - [x] **systemd service hardcodes `/home/pi/`** — replaced with `%h` systemd specifier (expands to User= home dir).
 - [x] **RTDE connection has no configurable timeout** — added `RTDE_CONNECT_TIMEOUT = 5.0` + `socket.setdefaulttimeout()` wrapper in `connect()`.
 - [x] **DASHBOARD_TIMEOUT defined but unused** — was already wired up (constructor accepts timeout, applies via `settimeout()`).
-- [ ] **TIMER_TIMERAWL hardcoded** — `core1_stallguard.c:34` uses bare address `0x40054028` instead of pico-sdk header. Correct for RP2040 but not portable to RP2350.
+- [x] **TIMER_TIMERAWL hardcoded** — replaced bare `0x40054028` with `#define TIMER_BASE` + `#define TIMER_TIMERAWL` (datasheet §4.6.5 reference).
 - [x] **gpio16 conflicts with filament runout sensor** — documented in `src/klipper_mods/README.md` "Hardware Notes" section.
 
 ### Design Documents — Complete
