@@ -79,19 +79,17 @@ jobs:
           name: release-firmware
           path: firmware
 
-      - name: Install pandoc
-        run: sudo apt-get install -y pandoc
+      - name: Install pandoc and wkhtmltopdf
+        run: sudo apt-get install -y pandoc wkhtmltopdf
 
       - name: Generate PDF docs
         run: |
           mkdir -p release-docs
           pandoc README.md -o release-docs/README.pdf \
-            --pdf-engine=html \
-            -V geometry:margin=1in \
-            --metadata title="W26 Cobot Axis — README"
+            --pdf-engine=wkhtmltopdf \
+            --metadata title="W26 Cobot Axis"
           pandoc docs/design_specification.md -o release-docs/design-specification.pdf \
-            --pdf-engine=html \
-            -V geometry:margin=1in \
+            --pdf-engine=wkhtmltopdf \
             --metadata title="W26 Design Specification"
 
       - name: Generate changelog
