@@ -11,6 +11,8 @@
 set -euo pipefail
 
 PI_HOST="${1:-pi@raspberrypi.local}"
+# Tilde expands on the remote side via SSH/rsync
+# shellcheck disable=SC2088
 REMOTE_DIR="~/W26-Cobot-Axis"
 
 # Colors
@@ -44,6 +46,7 @@ success "Source files synced"
 
 # Check ur_rtde is installed (not in stub mode)
 info "Checking ur_rtde on Pi..."
+# shellcheck disable=SC2088
 if ! ssh "$PI_HOST" "~/klippy-env/bin/python -c 'import rtde_receive; print(\"ur_rtde OK\")' 2>/dev/null"; then
     echo -e "\033[0;33m[warn]\033[0m ur_rtde not installed — bridge will run in stub mode (no real RTDE)"
 fi
@@ -56,6 +59,7 @@ success "w26-bridge restarted"
 # Sync klippy extras and restart Klipper (if stallguard_monitor.py exists)
 if [ -f src/klipper_mods/klippy_extras/stallguard_monitor.py ]; then
     info "Syncing stallguard_monitor.py and restarting Klipper..."
+    # shellcheck disable=SC2029,SC2088
     ssh "$PI_HOST" "cp $REMOTE_DIR/src/klipper_mods/klippy_extras/stallguard_monitor.py ~/klipper/klippy/extras/ && sudo systemctl restart klipper"
     success "Klipper restarted with updated klippy extras"
 fi

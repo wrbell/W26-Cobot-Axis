@@ -347,7 +347,7 @@ KCONFIG
     success "Firmware built: $KLIPPER_DIR/out/klipper.uf2"
 
     # Attempt to flash
-    SERIAL_DEVICE=$(ls /dev/serial/by-id/usb-Klipper_rp2040_* 2>/dev/null | head -1 || true)
+    SERIAL_DEVICE=$(find /dev/serial/by-id/ -maxdepth 1 -name 'usb-Klipper_rp2040_*' -print -quit 2>/dev/null || true)
     if [ -n "$SERIAL_DEVICE" ]; then
         info "Found Klipper device at $SERIAL_DEVICE -- flashing via make flash"
         if make flash FLASH_DEVICE="$SERIAL_DEVICE"; then
@@ -385,7 +385,7 @@ success "Installed and enabled $SERVICE_FILE"
 # ---------------------------------------------------------------------------
 step_header 9 "Update MCU serial path in printer.cfg"
 
-SERIAL_DEVICE=$(ls /dev/serial/by-id/usb-Klipper_rp2040_* 2>/dev/null | head -1 || true)
+SERIAL_DEVICE=$(find /dev/serial/by-id/ -maxdepth 1 -name 'usb-Klipper_rp2040_*' -print -quit 2>/dev/null || true)
 if [ -n "$SERIAL_DEVICE" ]; then
     success "Detected MCU at: $SERIAL_DEVICE"
     # Only update if printer.cfg still has the placeholder
@@ -412,7 +412,7 @@ info "Restarting Klipper..."
 sudo systemctl restart klipper
 
 info "Waiting for klippy socket (up to 30s)..."
-for i in $(seq 1 30); do
+for _ in $(seq 1 30); do
     if [ -S "$KLIPPY_UDS" ]; then
         break
     fi
@@ -475,7 +475,7 @@ else
     echo -e "    klippy socket:  ${RED}MISSING${NC}"
 fi
 
-MCU_SERIAL=$(ls /dev/serial/by-id/usb-Klipper_rp2040_* 2>/dev/null | head -1 || true)
+MCU_SERIAL=$(find /dev/serial/by-id/ -maxdepth 1 -name 'usb-Klipper_rp2040_*' -print -quit 2>/dev/null || true)
 if [ -n "$MCU_SERIAL" ]; then
     echo -e "    MCU serial:     ${GREEN}$MCU_SERIAL${NC}"
 else
