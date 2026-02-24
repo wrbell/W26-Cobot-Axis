@@ -280,7 +280,7 @@ class TestRegisterRead:
 class TestRegisterWrite:
 
     def test_write_status_sets_all_registers(self, mocked_client):
-        """write_status() calls all five setInput*Register methods."""
+        """write_status() calls all six setInput*Register methods."""
         client, mocks = mocked_client
         client.write_status(
             status=config.STATUS_RUNNING,
@@ -292,7 +292,8 @@ class TestRegisterWrite:
         ctrl = mocks["ctrl"]
         ctrl.setInputIntRegister.assert_any_call(0, config.STATUS_RUNNING)
         ctrl.setInputIntRegister.assert_any_call(1, config.ERR_NONE)
-        ctrl.setInputDoubleRegister.assert_called_once_with(0, 10.0)
+        ctrl.setInputDoubleRegister.assert_any_call(0, 10.0)
+        ctrl.setInputDoubleRegister.assert_any_call(1, 0.0)
         ctrl.setInputBitRegister.assert_any_call(64, True)
         ctrl.setInputBitRegister.assert_any_call(65, False)
 
@@ -320,7 +321,7 @@ class TestRegisterWrite:
             ready=True,
             fault=False,
         )
-        mocks["ctrl"].setInputDoubleRegister.assert_called_once_with(0, 42.5)
+        mocks["ctrl"].setInputDoubleRegister.assert_any_call(0, 42.5)
 
     def test_write_status_bool_registers(self, mocked_client):
         """write_status() sets bit registers 64 and 65."""
@@ -355,7 +356,7 @@ class TestRegisterWrite:
 
         ctrl.setInputIntRegister.assert_any_call(0, status)
         ctrl.setInputIntRegister.assert_any_call(1, error_code)
-        ctrl.setInputDoubleRegister.assert_called_with(0, rate)
+        ctrl.setInputDoubleRegister.assert_any_call(0, rate)
         ctrl.setInputBitRegister.assert_any_call(64, ready)
         ctrl.setInputBitRegister.assert_any_call(65, fault)
 

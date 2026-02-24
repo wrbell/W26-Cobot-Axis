@@ -46,8 +46,27 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 - `docs/design/` — Software design documents (13 docs: stepper driving, bridge enhancements, integration plan, etc.)
 - `docs/phase2/` — Phase 2 memo rough drafts (7 docs: block diagram, circuit schematic, pin table, power budget, buck converter, BOM, memo text)
 - `reqs/` — Course requirements, scope, process docs
+- `scripts/` — Deployment and development helper scripts
+- `vendor/` — Vendored dependencies (git-ignored, cloned locally)
 - `schedule.md` — Accelerated project schedule (target completion Mar 31, official submission Apr 24)
 - `todo.md` — Master task tracker
+
+## Development Setup
+
+After cloning the repo, run the following to set up vendored dependencies:
+
+```bash
+# Clone Klipper source (needed to verify firmware overlay patches mesh)
+git clone --depth 1 https://github.com/Klipper3d/klipper.git vendor/klipper
+```
+
+The `vendor/` directory is git-ignored. These local copies let you verify that StallGuard overlay patches (`src/klipper_mods/*.patch`) apply cleanly against the real Klipper source tree.
+
+**Running tests and lint:**
+```bash
+python -m pytest src/bridge/tests/ -v   # ~181 tests, <1s
+ruff check src/bridge/                  # lint
+```
 
 ## Project Phases
 

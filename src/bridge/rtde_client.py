@@ -106,7 +106,8 @@ class RTDEClient:
     # ------------------------------------------------------------------
 
     def write_status(self, status: int, error_code: int, actual_rate: float,
-                     ready: bool, fault: bool) -> None:
+                     ready: bool, fault: bool,
+                     stallguard_load: float = 0.0) -> None:
         """
         Write stepper status to UR30 input registers.
 
@@ -116,6 +117,7 @@ class RTDEClient:
             actual_rate: measured extrusion rate in mm/s
             ready: True if stepper can accept commands
             fault: True if fault condition is active
+            stallguard_load: StallGuard load value (0.0-255.0, lower = higher load)
         """
         if not HAS_UR_RTDE:
             return
@@ -123,6 +125,7 @@ class RTDEClient:
         self._rtde_c.setInputIntRegister(0, status)
         self._rtde_c.setInputIntRegister(1, error_code)
         self._rtde_c.setInputDoubleRegister(0, actual_rate)
+        self._rtde_c.setInputDoubleRegister(1, stallguard_load)
         self._rtde_c.setInputBitRegister(64, ready)
         self._rtde_c.setInputBitRegister(65, fault)
 

@@ -1,0 +1,15 @@
+--- a/src/rp2040/Makefile
++++ b/src/rp2040/Makefile
+@@ -31,6 +31,8 @@
+ src-$(CONFIG_WANT_HARD_PWM) += rp2040/hard_pwm.c
+ src-$(CONFIG_WANT_SPI) += rp2040/spi.c
+ src-$(CONFIG_WANT_I2C) += rp2040/i2c.c
++src-y += rp2040/core1_stallguard.c
++src-y += rp2040/stallguard_command.c
+
+ # rp2040 stage2 building
+
+# Note: Line numbers may shift across Klipper versions.
+# The key change: add both src-y lines after the last source file entry
+# in the rp2040 Makefile (currently after i2c.c).
+# deploy.sh Step 6b automates this with an idempotent sed.

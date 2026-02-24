@@ -192,6 +192,7 @@ class Bridge:
                     actual_rate=0.0,
                     ready=False,
                     fault=False,
+                    stallguard_load=0.0,
                 )
         except Exception:
             pass
@@ -427,10 +428,21 @@ class Bridge:
                     self.data_logger.annotate(f"SAFETY_{safety_mode}")
 
     def _check_stall_status(self) -> None:
-        """Check Klipper status poller for stall detection."""
+        """Check for stall detection: core1 DIAG first, then UART-polled."""
         if not self.status_poller:
             return
 
+        # Core1 DIAG-based detection (microsecond response, preferred)
+        if self.status_poller.is_hardware_stall():
+            if self.state.error_code != config.ERR_STALL:
+                log.warning("Hardware stall detected (core1 DIAG pin)")
+                self.state.error_code = config.ERR_STALL
+                self.state.fault = True
+                if self.data_logger:
+                    self.data_logger.annotate("STALL_HW")
+            return
+
+        # UART-polled fallback (250ms polling, sg_result threshold)
         if self.status_poller.is_stalled():
             if self.state.error_code != config.ERR_STALL:
                 log.warning("Stepper stall detected (StallGuard below threshold)")
@@ -615,6 +627,15 @@ class Bridge:
 
         self.state.actual_rate = actual_rate
 
+        # Get StallGuard load from TMC2209 UART-polled sg_result
+        stallguard_load = 0.0
+        if self.status_poller:
+            tmc_status = self.status_poller.get_tmc_status()
+            drv = tmc_status.get("drv_status", {})
+            sg_result = drv.get("sg_result")
+            if sg_result is not None:
+                stallguard_load = float(sg_result)
+
         try:
             self.rtde.write_status(
                 status=self.state.status,
@@ -622,6 +643,7 @@ class Bridge:
                 actual_rate=actual_rate,
                 ready=self.state.ready and not self.state.fault,
                 fault=self.state.fault,
+                stallguard_load=stallguard_load,
             )
         except Exception as exc:
             log.warning("Failed to write RTDE status: %s", exc)

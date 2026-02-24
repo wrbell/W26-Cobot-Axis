@@ -1,7 +1,7 @@
 #!/bin/bash
 # deploy.sh -- W26 Cobot Axis Deployment Script
 # Run on the headless Pi as the 'pi' user.
-# Usage: bash deploy.sh [--skip-flash]
+# Usage: bash deploy.sh [--skip-flash] [--skip-stallguard]
 #
 # This script is idempotent: safe to run multiple times.
 # It installs dependencies, deploys configs, and enables services.
@@ -19,14 +19,17 @@ KLIPPY_UDS="/tmp/klippy_uds"
 SERVICE_FILE="w26-bridge.service"
 
 SKIP_FLASH=false
+SKIP_STALLGUARD=false
 for arg in "$@"; do
     case "$arg" in
         --skip-flash) SKIP_FLASH=true ;;
+        --skip-stallguard) SKIP_STALLGUARD=true ;;
         --help|-h)
-            echo "Usage: bash deploy.sh [--skip-flash]"
+            echo "Usage: bash deploy.sh [--skip-flash] [--skip-stallguard]"
             echo ""
             echo "Options:"
-            echo "  --skip-flash    Skip Klipper firmware build and flash"
+            echo "  --skip-flash       Skip Klipper firmware build and flash"
+            echo "  --skip-stallguard  Skip StallGuard firmware overlay deployment"
             echo ""
             echo "This script deploys the W26 Cobot Axis software stack."
             echo "Run as the 'pi' user on a Raspberry Pi with MainsailOS or"
@@ -35,7 +38,7 @@ for arg in "$@"; do
             ;;
         *)
             echo "ERROR: Unknown argument: $arg"
-            echo "Usage: bash deploy.sh [--skip-flash]"
+            echo "Usage: bash deploy.sh [--skip-flash] [--skip-stallguard]"
             exit 1
             ;;
     esac
@@ -224,6 +227,63 @@ echo ""
 warn "REMINDER: The MCU serial path in printer.cfg must match your hardware."
 warn "Current value: $(grep 'serial:' "$REPO_DIR/src/klipper/printer.cfg" | head -1 | xargs)"
 warn "If it still says PLACEHOLDER, it will be updated in Step 9."
+
+# ---------------------------------------------------------------------------
+# Step 6b: Deploy StallGuard firmware overlay (optional)
+# ---------------------------------------------------------------------------
+step_header "6b" "Deploy StallGuard firmware overlay"
+
+if [ "$SKIP_STALLGUARD" = true ]; then
+    info "Skipping StallGuard overlay (--skip-stallguard specified)"
+else
+    MODS_DIR="$REPO_DIR/src/klipper_mods"
+    RP2040_SRC="$KLIPPER_DIR/src/rp2040"
+
+    if [ ! -d "$MODS_DIR" ]; then
+        warn "StallGuard mods not found at $MODS_DIR — skipping overlay"
+    else
+        # 1. Copy C/H firmware sources into Klipper tree
+        for f in stallguard_shared.h core1_stallguard.c stallguard_command.c; do
+            cp "$MODS_DIR/$f" "$RP2040_SRC/$f"
+        done
+        success "Copied StallGuard firmware sources to $RP2040_SRC/"
+
+        # 2. Patch Makefile — add src-y lines (idempotent)
+        MAKEFILE="$RP2040_SRC/Makefile"
+        if grep -q 'core1_stallguard' "$MAKEFILE" 2>/dev/null; then
+            info "Makefile already patched (core1_stallguard found)"
+        else
+            # Append after the last source file line (i2c.c) in the Makefile
+            sed -i '/rp2040\/i2c\.c/a src-y += rp2040/core1_stallguard.c\nsrc-y += rp2040/stallguard_command.c' "$MAKEFILE"
+            success "Patched Makefile with StallGuard source files"
+        fi
+
+        # 3. Patch main.c — add core1_launch() call (idempotent)
+        MAIN_C="$RP2040_SRC/main.c"
+        if grep -q 'core1_launch' "$MAIN_C" 2>/dev/null; then
+            info "main.c already patched (core1_launch found)"
+        else
+            # Add extern declaration after last #include
+            sed -i '/#include "sched.h"/a /* W26: Core1 StallGuard DIAG pin monitor */\nextern void core1_launch(void);' "$MAIN_C"
+            # Add core1_launch() call before sched_main()
+            sed -i '/sched_main();/i \    core1_launch();     /* W26: start DIAG monitor on core1 */' "$MAIN_C"
+            success "Patched main.c with core1_launch() call"
+        fi
+
+        # 4. Copy klippy extras module
+        EXTRAS_SRC="$MODS_DIR/klippy_extras/stallguard_monitor.py"
+        EXTRAS_DST="$KLIPPER_DIR/klippy/extras/stallguard_monitor.py"
+        if [ -f "$EXTRAS_SRC" ]; then
+            cp "$EXTRAS_SRC" "$EXTRAS_DST"
+            success "Installed stallguard_monitor.py klippy extras module"
+        else
+            warn "klippy extras source not found at $EXTRAS_SRC"
+        fi
+
+        success "StallGuard firmware overlay deployed"
+        info "The overlay will be compiled into firmware during Step 7."
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # Step 7: Flash Klipper firmware to SKR Pico (optional)

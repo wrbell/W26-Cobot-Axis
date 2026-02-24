@@ -88,6 +88,24 @@ def is_stepper_fault():
     return read_input_boolean_register(65)
 end
 
+def get_stallguard_load():
+    # Read StallGuard load value from bridge daemon (0-255)
+    # Lower values = higher motor load, 0 = stall
+    return read_input_float_register(1)
+end
+
+def check_stallguard():
+    # Check StallGuard status: -1 = stall, 0 = warning, 1 = ok
+    local sg = get_stallguard_load()
+    if sg < 10:
+        return -1   # stall detected
+    elif sg < 30:
+        return 0    # warning: high load
+    else:
+        return 1    # ok
+    end
+end
+
 def wait_for_stepper_ready(timeout_s):
     local t0 = 0.0
     while is_stepper_ready() == False:
@@ -198,10 +216,15 @@ def extrude_along_path(target_pose, speed, accel):
             set_extrusion_rate(rate)
         end
 
-        # Check for stepper faults
+        # Check for stepper faults (including StallGuard)
         if is_stepper_fault():
             local err = get_stepper_error()
-            popup(str_cat("Stepper fault: error code ", err), error=True)
+            local sg_status = check_stallguard()
+            if sg_status == -1:
+                popup("Pump stall detected (StallGuard)", error=True)
+            else:
+                popup(str_cat("Stepper fault: error code ", err), error=True)
+            end
             stopl(2.0)   # decelerate robot to stop
             break
         end

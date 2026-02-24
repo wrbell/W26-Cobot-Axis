@@ -58,6 +58,7 @@ INPUT_REGISTERS = {
     ],
     "double": [
         "input_double_register_0",    # actual extrusion rate (mm/s)
+        "input_double_register_1",    # StallGuard load value (0-255, from core1 DIAG)
     ],
     "bool": [
         "input_bit_register_64",      # stepper ready
@@ -69,6 +70,7 @@ class In:
     STATUS = "input_int_register_0"
     ERROR_CODE = "input_int_register_1"
     ACTUAL_RATE = "input_double_register_0"
+    STALLGUARD_LOAD = "input_double_register_1"
     READY = "input_bit_register_64"
     FAULT = "input_bit_register_65"
 
@@ -114,7 +116,10 @@ STATUS_POLL_OBJECTS = {
     "tmc2209 manual_stepper pump": None,   # full drv_status
     "stepper_enable": None,                # enabled steppers
 }
-STALLGUARD_THRESHOLD = 10            # sg_result below this = stall
+STALLGUARD_THRESHOLD = 10            # sg_result below this = stall (UART-polled)
+STALLGUARD_MONITOR_POLL_OBJECTS = {
+    "stallguard_monitor": None,          # core1 DIAG-based stall detection
+}
 
 # ---------------------------------------------------------------------------
 # Data logging (Enhancement 3 — P3)

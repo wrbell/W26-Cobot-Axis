@@ -443,6 +443,7 @@ class TestStatusReporting:
             actual_rate=25.0,
             ready=True,
             fault=False,
+            stallguard_load=0.0,
         )
 
     def test_report_status_ready_and_fault(self, bridge):
@@ -550,6 +551,7 @@ class TestShutdown:
             actual_rate=0.0,
             ready=False,
             fault=False,
+            stallguard_load=0.0,
         )
 
     def test_stop_disconnects_both_clients(self, bridge):

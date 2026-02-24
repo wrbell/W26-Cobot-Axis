@@ -1,0 +1,26 @@
+--- a/src/rp2040/main.c
++++ b/src/rp2040/main.c
+@@ -14,6 +14,9 @@
+ #include "hardware/structs/xosc.h" // xosc_hw
+ #include "internal.h" // enable_pclock
+ #include "sched.h" // sched_main
++/* W26: Core1 StallGuard DIAG pin monitor */
++extern void core1_launch(void);
++
+
+ #if CONFIG_MACH_RP2040
+ #include "hardware/structs/vreg_and_chip_reset.h"
+@@ -194,6 +197,7 @@
+ armcm_main(void)
+ {
+     enable_ram_vectortable();
+     clock_setup();
++    core1_launch();     /* W26: start DIAG monitor on core1 */
+     sched_main();
+ }
+
+# Note: Line numbers may shift across Klipper versions.
+# The key changes:
+#   1. Add "extern void core1_launch(void);" after the #include block
+#   2. Call "core1_launch();" immediately before "sched_main();" in armcm_main()
+# deploy.sh Step 6b automates this with idempotent sed commands.

@@ -34,9 +34,11 @@ class KlipperStatusPoller:
         # Cached status data (protected by lock)
         self._lock = threading.Lock()
         self._last_tmc_status: dict = {}
+        self._last_stallguard_status: dict = {}
         self._stepper_enabled_set: set = set()
         self._stale_count = 0
         self._tmc_available = True
+        self._stallguard_available = True
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -100,6 +102,23 @@ class KlipperStatusPoller:
             drv = self._last_tmc_status.get("drv_status", {})
             return bool(drv.get("stst", False))
 
+    def is_hardware_stall(self) -> bool:
+        """
+        True if core1 DIAG-based stall detection reports an active stall.
+
+        This is faster than UART-polled is_stalled() because core1 monitors
+        the DIAG pin at microsecond resolution via gpio16.
+        """
+        with self._lock:
+            if not self._stallguard_available or not self._last_stallguard_status:
+                return False
+            return bool(self._last_stallguard_status.get("stall_active", False))
+
+    def get_stallguard_status(self) -> dict:
+        """Return the latest core1 StallGuard monitor status dict."""
+        with self._lock:
+            return dict(self._last_stallguard_status)
+
     # ------------------------------------------------------------------
     # Background polling loop
     # ------------------------------------------------------------------
@@ -119,11 +138,15 @@ class KlipperStatusPoller:
                 log.warning("Klipper status poll connection error: %s", exc)
             except RuntimeError as exc:
                 # Klipper returned an error for a status object
-                error_msg = str(exc)
-                if "tmc2209" in error_msg.lower():
+                error_msg = str(exc).lower()
+                if "tmc2209" in error_msg:
                     log.warning("TMC2209 status unavailable -- disabling TMC queries: %s", exc)
                     with self._lock:
                         self._tmc_available = False
+                elif "stallguard" in error_msg:
+                    log.warning("StallGuard monitor unavailable -- disabling: %s", exc)
+                    with self._lock:
+                        self._stallguard_available = False
                 else:
                     log.warning("Klipper status poll error: %s", exc)
             except Exception as exc:
@@ -143,6 +166,10 @@ class KlipperStatusPoller:
         if self._tmc_available:
             objects["tmc2209 manual_stepper pump"] = None
 
+        # Query core1 StallGuard monitor if available
+        if self._stallguard_available:
+            objects["stallguard_monitor"] = None
+
         result = self._klipper.query_status(objects)
         status = result.get("status", {})
 
@@ -159,3 +186,9 @@ class KlipperStatusPoller:
                 tmc_data = status.get("tmc2209 manual_stepper pump", {})
                 if tmc_data:
                     self._last_tmc_status = tmc_data
+
+            # Update StallGuard monitor status
+            if self._stallguard_available:
+                sg_data = status.get("stallguard_monitor", {})
+                if sg_data:
+                    self._last_stallguard_status = sg_data

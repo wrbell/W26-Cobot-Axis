@@ -66,10 +66,17 @@ These registers are written by the RTDE bridge daemon on the Pi and read by URSc
 
 ### Registers Reserved for Future Use
 
+### Active Registers (Added)
+
+| Register | Type | Purpose | Range / Values |
+|----------|------|---------|---------------|
+| `input_double_register_1` | DOUBLE | StallGuard load value | 0.0–255.0 (lower = higher load, 0 = stall) |
+
+### Registers Reserved for Future Use
+
 | Register | Reserved For |
 |----------|-------------|
 | `input_int_register_2` | Current stepper position (steps) |
-| `input_double_register_1` | TMC2209 StallGuard load value (stretch goal) |
 | `input_double_register_2` | Stepper driver temperature (stretch goal) |
 | `input_bit_register_66` | Homing complete flag |
 
