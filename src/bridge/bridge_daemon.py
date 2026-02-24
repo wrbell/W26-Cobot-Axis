@@ -37,6 +37,7 @@ from .data_logger import DataLogger
 from .extrusion_profile import load_active_profile
 from .dashboard_client import DashboardClient, DashboardPoller
 from .stallguard_accumulator import StallGuardAccumulator
+from ._version import __version__
 
 log = logging.getLogger("bridge")
 
@@ -151,6 +152,7 @@ class Bridge:
         if self.data_logger:
             self.data_logger.start()
 
+        log.info("W26 Bridge v%s starting", __version__)
         log.info("Bridge running at %d Hz (dry_run=%s, extrusion_source=%s, "
                  "watchdog=%s, status_poll=%s, logging=%s, dashboard=%s)",
                  config.LOOP_HZ, self.dry_run,
@@ -672,6 +674,7 @@ class Bridge:
 
 def main():
     parser = argparse.ArgumentParser(description="W26 RTDE-to-Klipper Bridge")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
 
     # Core arguments
     parser.add_argument("--host", default=config.UR30_HOST,

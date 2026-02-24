@@ -65,32 +65,58 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Stamp version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Stamping version: ${VERSION}"
+          sed -i "s/__version__ = \"dev\"/__version__ = \"${VERSION}\"/" src/bridge/_version.py
+          cat src/bridge/_version.py
+
       - name: Download firmware artifact
         uses: actions/download-artifact@v4
         with:
           name: release-firmware
           path: firmware
 
+      - name: Install pandoc
+        run: sudo apt-get install -y pandoc
+
+      - name: Generate PDF docs
+        run: |
+          mkdir -p release-docs
+          pandoc README.md -o release-docs/README.pdf \
+            --pdf-engine=html \
+            -V geometry:margin=1in \
+            --metadata title="W26 Cobot Axis — README"
+          pandoc docs/design_specification.md -o release-docs/design-specification.pdf \
+            --pdf-engine=html \
+            -V geometry:margin=1in \
+            --metadata title="W26 Design Specification"
+
       - name: Generate changelog
         id: changelog
         run: |
-          # Get previous tag (if any)
           prev_tag=$(git tag --sort=-creatordate | head -2 | tail -1)
           if [ -z "$prev_tag" ] || [ "$prev_tag" = "${{ github.ref_name }}" ]; then
-            echo "body=Initial release" >> "$GITHUB_OUTPUT"
+            body="Initial release — W26 Cobot Axis v${VERSION}"
           else
             log=$(git log "${prev_tag}..HEAD" --pretty=format:"- %s" --no-merges)
-            {
-              echo 'body<<GHEOF'
-              echo "## Changes since ${prev_tag}"
-              echo ""
-              echo "$log"
-              echo 'GHEOF'
-            } >> "$GITHUB_OUTPUT"
+            body=$(printf "## Changes since %s\n\n%s" "$prev_tag" "$log")
           fi
+          {
+            echo 'body<<GHEOF'
+            echo "$body"
+            echo ""
+            echo "**Version:** ${VERSION}"
+            echo 'GHEOF'
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.changelog.outputs.body }}
-          files: firmware/klipper.uf2
+          files: |
+            firmware/klipper.uf2
+            release-docs/README.pdf
+            release-docs/design-specification.pdf
