@@ -1,0 +1,23 @@
+# Mypy configuration — type checking for bridge daemon
+[tool.mypy]
+ignore_missing_imports = true
+exclude = ["tests/", "vendor/"]
+
+# Per-module overrides for files using the optional-connection pattern
+# (self._conn = None in __init__, then self._conn.method() after connect).
+# These are safe at runtime but mypy can't prove it statically.
+[[tool.mypy.overrides]]
+module = [
+    "bridge.rtde_client",
+    "bridge.data_logger",
+    "bridge.dashboard_client",
+]
+disable_error_code = ["attr-defined", "assignment", "call-overload", "arg-type"]
+
+[[tool.mypy.overrides]]
+module = "bridge.extrusion_profile"
+disable_error_code = ["assignment"]
+
+[[tool.mypy.overrides]]
+module = "bridge.klipper_status"
+disable_error_code = ["var-annotated"]

@@ -268,6 +268,12 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] **Firmware size check** — `arm-none-eabi-size klipper.elf` in firmware workflow, fails if `.bss + .data` exceeds 200 KB (SRAM budget gate)
 - [x] **Documentation link checker** — inline Python script in CI verifies all `[text](path)` links in markdown files resolve
 - [x] **Release workflow** — `.github/workflows/release.yml`: on `v*` tag, runs full CI + firmware build, creates GitHub Release with `klipper.uf2` attached, auto-generates changelog
+- [x] **mypy type checking** — `mypy src/bridge/ --exclude tests/` in CI; `pyproject.toml` with per-module overrides for optional-connection pattern
+- [x] **Python version matrix** — lint-and-test runs on Python 3.9 (Pi) and 3.11 (dev) to catch compatibility issues
+- [x] **Patch freshness** — `.github/workflows/patch-freshness.yml`: weekly cron verifies StallGuard sed patches still apply against upstream Klipper
+- [x] **deploy.sh dry-run** — `bash -n` syntax check + `shellcheck --severity=warning` in separate deploy-check CI job
+- [x] **codespell** — spell checks all docs and source; `-L "ot"` for false positive suppression
+- [x] **Dependabot** — `.github/dependabot.yml`: weekly auto-PRs for pip dependencies and GitHub Actions versions
 
 #### Stretch: Batch StallGuard Data Reporting (instead of live)
 Investigate changing StallGuard measurement reporting from live 20 Hz polling to batch mode — buffer measurements on-device and send them back periodically.

@@ -1,5 +1,6 @@
 ![CI](../../actions/workflows/ci.yml/badge.svg)
 ![Firmware Build](../../actions/workflows/firmware.yml/badge.svg)
+![Patch Freshness](../../actions/workflows/patch-freshness.yml/badge.svg)
 
 # W26 Cobot Axis — UR30 7th Axis for Metal Paste Dispensing
 
@@ -61,7 +62,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 | **Phase 1: Ideation** | Complete |
 | **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
 | **Software development** | All source code written and unit tested (335 tests across 10 files, clean lint). 7 bridge enhancements + StallGuard firmware. Waiting on hardware for integration. |
-| **CI/CD** | Tier 1 (lint + test + coverage + shellcheck), Tier 2 (firmware cross-compile + size check), Tier 4 quality gates (yamllint, pip-audit, link checker), and release workflow live. |
+| **CI/CD** | Tier 1 (lint + test + coverage + mypy + shellcheck, Python 3.9/3.11 matrix), Tier 2 (firmware cross-compile + SRAM size check), quality gates (yamllint, pip-audit, codespell, link checker, deploy-check), release workflow, patch freshness (weekly cron), and Dependabot. |
 | **StallGuard firmware** | Written — RP2040 core1 DIAG pin monitor (C firmware + klippy extras + patches). Verified against real Klipper source tree. All audit issues resolved. |
 | **Deploy tooling** | Written — `deploy.sh` (11-step + StallGuard overlay, cross-platform sed), `scripts/dev-sync.sh` (fast rsync for iterative dev) |
 | **HITL test plan** | Written — `docs/design/hitl_plan.md` with TP-06 StallGuard procedures, URSim dev bench topology, deploy workflow |
@@ -94,7 +95,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209, stallguard_monitor), `moonraker.conf`, `mainsail.cfg` (pump macros)
 - URScript: extrusion control library, system validation test (10 sub-tests), pump calibration test (5 sub-tests)
 - Deployment: `requirements.txt` (runtime + dev deps), systemd service (portable `%h` paths), 11-step deploy script (with StallGuard overlay, cross-platform sed), full setup guide, dev-sync script
-- CI/CD: GitHub Actions Tier 1 (ruff + pytest + coverage + shellcheck + yamllint + pip-audit + link-check), Tier 2 (ARM firmware cross-compile + SRAM size check), Tier 4 quality gates, and release workflow (v* tags → GitHub Release with klipper.uf2)
+- CI/CD: GitHub Actions Tier 1 (ruff + pytest + coverage + mypy + shellcheck, Python 3.9/3.11 matrix), Tier 2 (ARM firmware cross-compile + SRAM size check), quality gates (yamllint, pip-audit, codespell, link checker, deploy-check), release workflow (v* tags → GitHub Release), patch freshness (weekly cron), and Dependabot (pip + actions)
 - Config validation: 24 tests covering register naming, uniqueness, constant sanity
 
 **StallGuard Dual-Core Firmware (`src/klipper_mods/`):**
@@ -276,11 +277,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   └── dev-sync.sh                # Fast rsync to Pi for iterative development
 ├── vendor/                        # Vendored dependencies (git-ignored)
 │   └── klipper/                   # Klipper source (shallow clone for patch verification)
-├── .github/workflows/
-│   ├── ci.yml                     # Tier 1: lint + test + coverage + shellcheck + yamllint + pip-audit + link-check
-│   ├── firmware.yml               # Tier 2: firmware build + SRAM size check on klipper_mods changes
-│   └── release.yml                # Release: on v* tag, full CI + firmware + GitHub Release with klipper.uf2
+├── .github/
+│   ├── dependabot.yml             # Dependabot: weekly pip + GitHub Actions updates
+│   └── workflows/
+│       ├── ci.yml                 # Tier 1: lint + test + coverage + mypy + shellcheck + quality gates (7 jobs, Python 3.9/3.11 matrix)
+│       ├── firmware.yml           # Tier 2: firmware build + SRAM size check on klipper_mods changes
+│       ├── patch-freshness.yml    # Weekly cron: verify StallGuard patches apply against upstream Klipper
+│       └── release.yml            # Release: on v* tag, full CI + firmware + GitHub Release with klipper.uf2
 ├── .yamllint                      # yamllint config (relaxed: allow long lines, truthy)
+├── pyproject.toml                 # mypy config with per-module overrides
 ├── .gitignore                     # Ignores vendor/, __pycache__, .DS_Store, etc.
 ├── deploy.sh                      # 11-step idempotent deployment script (+ StallGuard overlay)
 ├── SETUP.md                       # Fresh Pi setup guide

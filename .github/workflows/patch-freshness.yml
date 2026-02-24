@@ -1,0 +1,54 @@
+name: Patch Freshness
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9:00 UTC
+  workflow_dispatch:
+
+jobs:
+  check-patches:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone upstream Klipper
+        run: git clone --depth 1 https://github.com/Klipper3d/klipper.git
+
+      - name: Verify StallGuard patch anchors exist
+        run: |
+          echo "Checking Makefile anchor..."
+          grep -q 'rp2040/i2c\.c' klipper/src/rp2040/Makefile
+          echo "  OK: rp2040/i2c.c found in Makefile"
+
+          echo "Checking main.c anchor (sched.h include)..."
+          grep -q '#include "sched.h"' klipper/src/rp2040/main.c
+          echo "  OK: #include sched.h found in main.c"
+
+          echo "Checking main.c anchor (sched_main call)..."
+          grep -q 'sched_main()' klipper/src/rp2040/main.c
+          echo "  OK: sched_main() found in main.c"
+
+      - name: Apply patches (dry run)
+        run: |
+          # Copy overlay files
+          cp src/klipper_mods/stallguard_shared.h klipper/src/rp2040/
+          cp src/klipper_mods/core1_stallguard.c klipper/src/rp2040/
+          cp src/klipper_mods/stallguard_command.c klipper/src/rp2040/
+
+          # Apply Makefile patch
+          sed -i '/rp2040\/i2c\.c/a src-y += rp2040/core1_stallguard.c\nsrc-y += rp2040/stallguard_command.c' klipper/src/rp2040/Makefile
+
+          # Apply main.c patches
+          sed -i '/#include "sched.h"/a /* W26: Core1 StallGuard DIAG pin monitor */\nextern void core1_launch(void);' klipper/src/rp2040/main.c
+          sed -i '/sched_main();/i \    core1_launch();' klipper/src/rp2040/main.c
+
+          echo "All patches applied successfully"
+
+      - name: Verify patched files
+        run: |
+          echo "=== Makefile (StallGuard lines) ==="
+          grep -n 'stallguard' klipper/src/rp2040/Makefile
+
+          echo ""
+          echo "=== main.c (core1_launch lines) ==="
+          grep -n 'core1_launch\|Core1 StallGuard' klipper/src/rp2040/main.c
