@@ -90,7 +90,7 @@ class TestKlipperStatusPollerStallGuard:
                 "stallguard_monitor": {
                     "stall_active": True,
                     "stall_count": 3,
-                    "last_stall_us": 12345,
+                    "last_stall_ticks": 12345,
                 },
             }
         }

@@ -42,6 +42,12 @@ rsync -avz --delete \
     src/ "$PI_HOST:$REMOTE_DIR/src/"
 success "Source files synced"
 
+# Check ur_rtde is installed (not in stub mode)
+info "Checking ur_rtde on Pi..."
+if ! ssh "$PI_HOST" "~/klippy-env/bin/python -c 'import rtde_receive; print(\"ur_rtde OK\")' 2>/dev/null"; then
+    echo -e "\033[0;33m[warn]\033[0m ur_rtde not installed — bridge will run in stub mode (no real RTDE)"
+fi
+
 # Restart bridge daemon
 info "Restarting w26-bridge service..."
 ssh "$PI_HOST" "sudo systemctl restart w26-bridge"

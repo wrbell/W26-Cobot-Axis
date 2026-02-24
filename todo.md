@@ -163,11 +163,19 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] **Watchdog timer** — RTDE timestamp-based stale detection, 0.5s timeout (`watchdog.py`)
 - [x] **Configurable extrusion profiles** — linear, polynomial, lookup table (`extrusion_profile.py`, `profiles.json`)
 - [x] **Dashboard Server client** — UR30 port 29999 lifecycle management (`dashboard_client.py`)
+- [x] **StallGuard accumulator** — Pi-side 5-minute history buffer for batch data reporting (`stallguard_accumulator.py`)
 
-#### Testing
+#### Testing — 335 tests across 10 files
 - [x] **Unit tests for `klipper_client.py`** — 42 tests, mock Unix socket, JSON protocol, error handling
-- [x] **Unit tests for `rtde_client.py`** — 34 tests, stub mode, register read/write
+- [x] **Unit tests for `rtde_client.py`** — 43 tests, stub mode, register read/write
 - [x] **Unit tests for `bridge_daemon.py`** — 71 tests, command translation, e-stop, mode switching, reconnection
+- [x] **Unit tests for StallGuard** — 25 tests, bridge integration with stallguard status
+- [x] **Unit tests for `watchdog.py`** — 15 tests, timeout detection, feed/reset, stale timestamp logic, disabled mode
+- [x] **Unit tests for `data_logger.py`** — 17 tests, CSV columns, file rotation, decimation, annotations, lifecycle
+- [x] **Unit tests for `extrusion_profile.py`** — 39 tests, linear/polynomial/lookup profiles, JSON loading, fallback, edge cases
+- [x] **Unit tests for `dashboard_client.py`** — 25 tests, TCP server mock, status queries, control commands, DashboardPoller
+- [x] **Unit tests for `stallguard_accumulator.py`** — 30 tests, NamedTuple, capacity, overflow, thread safety, stats, poller/bridge wiring
+- [x] **Config validation tests** — 24 tests: register name format, no duplicates, sane constants (`test_config.py`)
 - [ ] **URSim integration testing** — moved to Phase 3 "Pre-Hardware: URSim Validation" section
 
 ### Klipper Configuration (`src/klipper/`)
@@ -180,11 +188,104 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] `test_basic.script` — system validation test (10 sub-tests: A–I + G2; Sub-test G tests constant-rate multi-waypoint pattern, G2 tests speed-sync)
 - [x] `test_calibration.script` — pump calibration (5 sub-tests: A linearity, B speed-sync gravimetric, B2 constant-rate gravimetric, C retraction, D latency)
 
+### StallGuard Dual-Core Firmware (`src/klipper_mods/`)
+
+#### Core — Written
+- [x] `stallguard_shared.h` — Shared SRAM struct + spinlock #16 helpers
+- [x] `core1_stallguard.c` — Core1 entry: gpio16 init, debounce loop, FIFO launch protocol
+- [x] `stallguard_command.c` — Klipper DECL_COMMAND: `stallguard_query`, `stallguard_clear`
+- [x] `klippy_extras/stallguard_monitor.py` — Klippy host module: 20 Hz poll, Moonraker status object
+- [x] `Makefile.patch` — Add source files to Klipper rp2040 build
+- [x] `main.c.patch` — Call `core1_launch()` before `sched_main()` in `armcm_main()`
+- [x] `README.md` — Build & deploy instructions
+
+#### Verification
+- [x] Patches verified against real Klipper source tree (`vendor/klipper/`)
+- [x] Linker symbol `_ram_vectortable_start` matches Klipper's `rpxxxx_link.lds.S`
+- [x] Register addresses verified against RP2040 datasheet
+- [x] GPIO16 correct for SKR Pico E-stepper DIAG pin
+- [x] Spinlock #16 safe (not used by Klipper)
+- [ ] **Build verification on Pi** — needs hardware (`make` with overlay in Klipper tree)
+- [ ] **Runtime verification** — needs hardware (stall motor, check Moonraker status)
+
+#### Audit Fixes (Feb 24) — All Applied
+- [x] Fixed `_vector_table` → `_ram_vectortable_start` linker symbol in `core1_stallguard.c`
+- [x] Fixed `last_stall_us` → `last_stall_ticks` naming mismatch in `stallguard_monitor.py`, README, hitl_plan, tests
+- [x] Added `printer.add_object()` call in `stallguard_monitor.py` (Moonraker couldn't discover module)
+- [x] Added dedicated command queue allocation in `stallguard_monitor.py` (was competing with stepper queue)
+- [x] Added error count suppression in `stallguard_monitor.py` poll loop (was silently swallowing errors)
+- [x] Fixed race condition: `clear_request` now read under spinlock in `core1_stallguard.c`
+- [x] Added file existence validation in `deploy.sh` before sed patching (Makefile, main.c)
+- [x] Added ur_rtde installation check in `dev-sync.sh` (warns if bridge will run in stub mode)
+
 ### Deployment — Written
 - [x] `requirements.txt` — Python dependencies (ur-rtde)
 - [x] `src/systemd/w26-bridge.service` — systemd service, auto-start after Klipper
-- [x] `deploy.sh` — 11-step deployment script (deps, configs, firmware, verification)
+- [x] `deploy.sh` — 11-step deployment script (deps, configs, firmware, verification) + StallGuard overlay (Step 6b)
+- [x] `scripts/dev-sync.sh` — Fast rsync to Pi for iterative development (<5s)
 - [x] `SETUP.md` — step-by-step setup instructions for fresh Pi
+
+### HITL Test Plan — Written
+- [x] `docs/design/hitl_plan.md` — TP-06 StallGuard test procedures, URSim dev bench topology, deploy workflow
+- [ ] **Execute TP-06** — needs hardware
+
+### CI/CD Pipeline
+
+#### Tier 1: Pre-commit Checks (GitHub Actions, runs on every push, <30s)
+- [x] **Create `.github/workflows/ci.yml`** — lint + test on every push
+  - `ruff check src/bridge/`
+  - `python -m pytest src/bridge/tests/ -v`
+  - `shellcheck deploy.sh scripts/dev-sync.sh`
+- [x] **Add status badge** to README.md
+
+#### Tier 2: Firmware Build Verification (runs on `src/klipper_mods/` changes)
+- [x] **Add firmware build job to CI** — triggered on changes to `src/klipper_mods/**`
+  - Clone Klipper source
+  - Copy overlay files into Klipper tree
+  - Run the same sed commands from deploy.sh
+  - `make menuconfig` (non-interactive, write .config)
+  - `make` — verify firmware compiles with `arm-none-eabi-gcc`
+  - Upload `klipper.uf2` as build artifact
+- [x] **Install cross-compiler in CI** — `apt install gcc-arm-none-eabi`
+
+#### CI/CD Setup Guide
+- [ ] **Write GitHub Actions setup guide** — document how to enable CI/CD: push to GitHub, verify workflows trigger, badge shows green, explain Tier 1 vs Tier 2 vs Tier 3, how to read build results and artifacts
+
+#### Tier 3: Deploy-to-Pi (manual trigger or tagged release)
+- [ ] **Add deploy workflow** — manual dispatch or on `v*` tag
+  - SSH to Pi (via self-hosted runner or SSH action with secrets)
+  - `git pull` on Pi
+  - `bash deploy.sh` (or `--skip-flash` if no firmware changes)
+  - Smoke test: `systemctl status klipper w26-bridge`
+  - `curl http://localhost:7125/printer/objects/query?stallguard_monitor`
+- [ ] **Store Pi SSH credentials** as GitHub Actions secrets (`PI_HOST`, `PI_SSH_KEY`)
+
+#### Stretch: Batch StallGuard Data Reporting (instead of live)
+Investigate changing StallGuard measurement reporting from live 20 Hz polling to batch mode — buffer measurements on-device and send them back periodically.
+
+**Hardware research findings (Feb 24):**
+- RP2040 has 264 KB SRAM total, estimated ~130–160 KB free after Klipper (need `arm-none-eabi-size klipper.elf` to confirm)
+- SKR Pico flash is **2 MB** (W25Q16), NOT 16 MB — ~1.9 MB free after firmware
+- **Flash is NOT viable** for runtime logging: sector erase takes ~85 ms, which blocks all interrupts and kills step timing (up to 11k missed step events at max step rate)
+- **66 KB SRAM buffer** (5 min @ 20 Hz × 11 bytes/sample) is too large — insufficient margin above Klipper runtime needs
+- **16 KB SRAM ring buffer** is the safe max: gives ~74 seconds at 20 Hz (1,489 samples)
+- Klipper MCU protocol max message = 64 bytes, no native bulk transfer — would need custom `stallguard_dump` command to walk the buffer in 50-byte chunks
+- **Recommended approach:** Pi-side buffering in bridge daemon (`collections.deque(maxlen=6000)` = 5 min), not MCU-side. Only add MCU buffer if Pi connection can drop mid-run and post-hoc recovery is needed.
+
+**Tasks:**
+- [ ] Run `arm-none-eabi-size ~/klipper/out/klipper.elf` on first hardware build to get exact SRAM usage
+- [x] Implement Pi-side 5-minute StallGuard accumulator in bridge daemon (deque in Python, zero MCU changes)
+- [x] Add periodic CSV dump or Moonraker-accessible endpoint for accumulated data (`dump_to_csv()` method + 4 tests)
+- [ ] **(Stretch)** If MCU-side buffering is needed: add 16 KB SRAM ring buffer in `core1_stallguard.c` + `stallguard_dump` command
+- [ ] Evaluate whether 20 Hz polling rate can be reduced (e.g., 5 Hz) to extend buffer duration with same memory
+
+#### Known Audit Issues (not yet fixed — low priority)
+- [x] **deploy.sh uses GNU sed** — added OS detection: `SED_INPLACE` array handles GNU vs BSD sed.
+- [x] **systemd service hardcodes `/home/pi/`** — replaced with `%h` systemd specifier (expands to User= home dir).
+- [x] **RTDE connection has no configurable timeout** — added `RTDE_CONNECT_TIMEOUT = 5.0` + `socket.setdefaulttimeout()` wrapper in `connect()`.
+- [x] **DASHBOARD_TIMEOUT defined but unused** — was already wired up (constructor accepts timeout, applies via `settimeout()`).
+- [ ] **TIMER_TIMERAWL hardcoded** — `core1_stallguard.c:34` uses bare address `0x40054028` instead of pico-sdk header. Correct for RP2040 but not portable to RP2350.
+- [x] **gpio16 conflicts with filament runout sensor** — documented in `src/klipper_mods/README.md` "Hardware Notes" section.
 
 ### Design Documents — Complete
 All software features are being designed before implementation. Design docs in `docs/design/`.
@@ -209,6 +310,32 @@ All software features are being designed before implementation. Design docs in `
 
 Full integration plan with troubleshooting: `docs/design/integration_plan.md`
 
+### Pre-Hardware Checklist (before first power-on)
+
+These are known gotchas from the end-to-end audit. Check each before testing.
+
+#### Physical Hardware (Pi + SKR Pico)
+- [ ] **Install DIAG jumper** on SKR Pico E-stepper header — connects TMC2209 DIAG output to gpio16. Without it, gpio16 floats and StallGuard always reads "no stall".
+- [ ] **Update printer.cfg serial path** — replace `PLACEHOLDER` in `[mcu]` with actual device from `ls /dev/serial/by-id/usb-Klipper_rp2040_*`. deploy.sh does this automatically.
+- [ ] **Verify ur_rtde installed on Pi** — `python -c "import rtde_receive; print('OK')"`. If it fails, bridge runs in stub mode (no real RTDE). ARM binary wheel may need `pip install ur-rtde --no-cache-dir`.
+- [ ] **Verify Klipper socket path** — default `/tmp/klippy_uds` is correct for MainsailOS. Check with `ls -la /tmp/klippy_uds`.
+- [ ] **Verify Pi username is `pi`** — systemd service hardcodes `/home/pi/`. If different, edit `src/systemd/w26-bridge.service` paths.
+- [ ] **Calibrate motor rotation_distance** — `printer.cfg` uses generic `rotation_distance: 40` (40mm/rev). Measure actual pump displacement per revolution and update.
+
+#### URSim on Windows
+- [ ] **Open Windows firewall for port 30004** — `New-NetFirewallRule -DisplayName "URSim RTDE" -Direction Inbound -LocalPort 30004 -Protocol TCP -Action Allow`
+- [ ] **Docker Desktop with WSL2 backend** — URSim requires Linux containers. Verify Docker is running Linux mode, not Windows mode.
+- [ ] **Expose correct Docker ports** — `docker run -p 30004:30004 -p 6080:6080 -p 29999:29999 ...`. Port 30004 = RTDE, 6080 = noVNC teach pendant, 29999 = Dashboard (optional).
+- [ ] **Find Windows IP** — `ipconfig` → note IPv4 address. Pass to bridge: `python -m bridge --host <WINDOWS_IP>`.
+- [ ] **Power on virtual robot** — in noVNC teach pendant (`http://localhost:6080`), click power on. RTDE port won't respond until robot is powered.
+- [ ] **RTDE frequency** — config.py defaults to 500 Hz. URSim e-Series should match, but if connection fails, try setting `RTDE_FREQUENCY = 125` in config.py.
+
+#### Bridge Daemon Config for URSim Testing
+- [ ] **Override host IP** — `python -m bridge --host <WINDOWS_IP>` (or systemd override: `sudo systemctl edit w26-bridge`)
+- [ ] **Use `--no-status-poll` if no SKR Pico** — disables TMC2209 and StallGuard queries that require real hardware
+- [ ] **Use `--dry-run` for RTDE-only testing** — skips Klipper connection entirely, just logs what commands would be sent
+- [ ] **Dashboard Server is opt-in** — off by default. Only enable with `--dashboard` if URSim exposes port 29999.
+
 ### Pre-Hardware: URSim Validation (can start now)
 
 - [ ] **Set up URSim on Windows** — `docker run --platform=linux/amd64 -e ROBOT_MODEL=UR30 -p 30004:30004 -p 29999:29999 -p 6080:6080 universalrobots/ursim_e-series`
@@ -225,11 +352,13 @@ Full integration plan with troubleshooting: `docs/design/integration_plan.md`
 
 ### Stage 2: SKR Pico Firmware (Week 9, Day 1–2)
 
-- [ ] Build Klipper MCU firmware: `make menuconfig` → RP2040, no bootloader, W25Q080 CLKDIV 2, USB
+- [ ] Run `deploy.sh` — handles Klipper config, StallGuard overlay, firmware build, and flash
+- [ ] Or manually: Build Klipper MCU firmware: `make menuconfig` → RP2040, no bootloader, W25Q080 CLKDIV 2, USB
 - [ ] Flash via BOOTSEL: hold button, plug USB, copy `klipper.uf2` to `RPI-RP2` drive
 - [ ] Verify USB serial enumeration: `ls /dev/serial/by-id/usb-Klipper_rp2040_*`
 - [ ] Deploy `printer.cfg` to `~/printer_data/config/`, update `[mcu]` serial path
 - [ ] Restart Klipper, confirm `Printer is ready` in klippy.log and Mainsail shows green
+- [ ] Verify StallGuard via Moonraker: `curl http://localhost:7125/printer/objects/query?stallguard_monitor`
 
 ### Stage 3: First Stepper Motion (Week 9, Day 2–3)
 
@@ -384,9 +513,16 @@ Injects each failure mode from the problem analysis and verifies safe response.
 
 ### Stretch Goals (if time permits)
 
-- [ ] **StallGuard torque feedback** — TMC2209 DIAG → Klipper → RTDE → URScript (would change TP-04b from open-loop to closed-loop stall detection)
+- [x] **StallGuard torque feedback** — WRITTEN, needs hardware validation. TMC2209 DIAG → Core1 → Klipper MCU command → klippy extras → RTDE → URScript. See `src/klipper_mods/` and `docs/design/hitl_plan.md`. Would change TP-04b from open-loop to closed-loop stall detection.
 - [ ] **G-code timeshifting** — compensate Klipper lookahead buffer latency
 - [ ] **URCap** for teach pendant UI (Java SDK)
+
+### Analysis Assignment (Due Apr 2, Canvas)
+
+From Dr. Pannier check-in (Feb 24):
+
+- [ ] **Motor load calculations** — MATLAB/Simulink model to verify stepper motor is not overloaded by pump, and UR30 power supply can handle the current draw (V=IR)
+- [ ] **Motor ramp simulation** — differential equation model of motor during extrusion ramp-up to verify current does not exceed driver/supply limits
 
 ### Final Report (Due Apr 23)
 
@@ -402,7 +538,15 @@ Injects each failure mode from the problem analysis and verifies safe response.
 
 ### Oral Presentation (Apr 24, 6:30–9:30 PM)
 
-- [ ] Prepare presentation
+Layout guidance from Dr. Pannier (Feb 24):
+1. Intro
+2. What each component is (e.g., "what is Klipper")
+3. What we built
+4. Why we built it
+5. How we built it
+6. Results / "winning"
+
+- [ ] Prepare presentation following Dr. Pannier's layout
 - [ ] Practice design defense
 - [ ] Prepare prototype for demonstration
 
@@ -438,7 +582,21 @@ Injects each failure mode from the problem analysis and verifies safe response.
 | Bridge config (registers, constants) | `src/bridge/config.py` | Written |
 | Klipper Unix socket client | `src/bridge/klipper_client.py` | Written |
 | RTDE client wrapper | `src/bridge/rtde_client.py` | Written |
+| Klipper status poller | `src/bridge/klipper_status.py` | Written |
+| Watchdog timer | `src/bridge/watchdog.py` | Written |
+| Data logger | `src/bridge/data_logger.py` | Written |
+| Extrusion profiles | `src/bridge/extrusion_profile.py` | Written |
+| Dashboard client | `src/bridge/dashboard_client.py` | Written |
+| StallGuard accumulator | `src/bridge/stallguard_accumulator.py` | Written |
 | Klipper printer config | `src/klipper/printer.cfg` | Written |
+| Moonraker config | `src/klipper/moonraker.conf` | Written |
+| Mainsail pump macros | `src/klipper/mainsail.cfg` | Written |
+| StallGuard shared header | `src/klipper_mods/stallguard_shared.h` | Written |
+| StallGuard core1 firmware | `src/klipper_mods/core1_stallguard.c` | Written |
+| StallGuard MCU commands | `src/klipper_mods/stallguard_command.c` | Written |
+| StallGuard klippy module | `src/klipper_mods/klippy_extras/stallguard_monitor.py` | Written |
 | URScript extrusion program | `src/urscript/extrusion_control.script` | Written |
 | URScript validation test | `src/urscript/test_basic.script` | Written |
 | URScript calibration test | `src/urscript/test_calibration.script` | Written |
+| Deploy script | `deploy.sh` | Written |
+| Dev sync script | `scripts/dev-sync.sh` | Written |

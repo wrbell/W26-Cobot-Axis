@@ -38,15 +38,16 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 ## Repository Structure
 
 - `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
-- `src/bridge/tests/` — pytest suite (156 tests across 3 files)
+- `src/bridge/tests/` — pytest suite (335 tests across 10 files)
 - `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
+- `src/klipper_mods/` — StallGuard dual-core firmware overlay (C firmware, klippy extras, patches)
 - `src/urscript/` — URScript programs for UR30 teach pendant
 - `trades/` — Trade studies (comms protocol, MCU platform, Klipper vs Lingua Franca)
 - `docs/` — Engineering analysis and technical reference (latency, register allocation, hardware specs)
-- `docs/design/` — Software design documents (13 docs: stepper driving, bridge enhancements, integration plan, etc.)
+- `docs/design/` — Software design documents (13+ docs: stepper driving, bridge enhancements, integration plan, HITL plan, etc.)
 - `docs/phase2/` — Phase 2 memo rough drafts (7 docs: block diagram, circuit schematic, pin table, power budget, buck converter, BOM, memo text)
 - `reqs/` — Course requirements, scope, process docs
-- `scripts/` — Deployment and development helper scripts
+- `scripts/` — Deployment and development helper scripts (`dev-sync.sh`)
 - `vendor/` — Vendored dependencies (git-ignored, cloned locally)
 - `schedule.md` — Accelerated project schedule (target completion Mar 31, official submission Apr 24)
 - `todo.md` — Master task tracker
@@ -64,7 +65,7 @@ The `vendor/` directory is git-ignored. These local copies let you verify that S
 
 **Running tests and lint:**
 ```bash
-python -m pytest src/bridge/tests/ -v   # ~181 tests, <1s
+python -m pytest src/bridge/tests/ -v   # ~335 tests, <1s
 ruff check src/bridge/                  # lint
 ```
 
@@ -97,10 +98,17 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | Bridge config (registers, constants) | `src/bridge/config.py` |
 | Klipper Unix socket client | `src/bridge/klipper_client.py` |
 | RTDE client wrapper | `src/bridge/rtde_client.py` |
+| StallGuard accumulator | `src/bridge/stallguard_accumulator.py` |
 | Klipper printer config | `src/klipper/printer.cfg` |
 | URScript extrusion program | `src/urscript/extrusion_control.script` |
 | URScript system validation test | `src/urscript/test_basic.script` |
 | URScript pump calibration test | `src/urscript/test_calibration.script` |
+| StallGuard shared header | `src/klipper_mods/stallguard_shared.h` |
+| StallGuard core1 firmware | `src/klipper_mods/core1_stallguard.c` |
+| StallGuard MCU commands | `src/klipper_mods/stallguard_command.c` |
+| StallGuard klippy module | `src/klipper_mods/klippy_extras/stallguard_monitor.py` |
+| Deploy script | `deploy.sh` |
+| Dev sync script | `scripts/dev-sync.sh` |
 
 ## Design Documents
 
@@ -111,6 +119,7 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | Latency analysis | `docs/latency_analysis.md` |
 | Design specification (25 requirements) | `docs/design_specification.md` |
 | Stepper driving design (consolidated) | `docs/design/stepper_driving.md` |
+| HITL test plan (StallGuard + URSim) | `docs/design/hitl_plan.md` |
 | Trade: Klipper vs Lingua Franca | `trades/lingua_franca_vs_klipper.md` |
 | Trade: Communication protocol | `trades/comms.md` |
 | Trade: MCU platform | `trades/mcu.md` |
@@ -142,7 +151,7 @@ Rough drafts in `docs/phase2/` — content ready to paste into Word and redraw i
 
 ## Stretch Goals
 
-- Stallguard torque feedback from TMC2209 → Klipper `register_remote_method` → RTDE → URScript
+- **StallGuard torque feedback** — WRITTEN, needs hardware validation. TMC2209 DIAG → Core1 monitor → Klipper MCU command → klippy extras → RTDE → URScript. See `src/klipper_mods/` and `docs/design/hitl_plan.md`.
 - URCap for teach pendant UI (Java SDK, not needed for MVP)
 - Predictive G-code timeshifting using Klipper's ~100ms lookahead buffer
 

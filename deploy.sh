@@ -45,6 +45,15 @@ for arg in "$@"; do
 done
 
 # ---------------------------------------------------------------------------
+# OS detection for sed compatibility (GNU vs BSD)
+# ---------------------------------------------------------------------------
+if [[ "$(uname)" == "Darwin" ]]; then
+    SED_INPLACE=(sed -i '')
+else
+    SED_INPLACE=(sed -i)
+fi
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 RED='\033[0;31m'
@@ -241,6 +250,10 @@ else
 
     if [ ! -d "$MODS_DIR" ]; then
         warn "StallGuard mods not found at $MODS_DIR — skipping overlay"
+    elif [ ! -d "$RP2040_SRC" ]; then
+        error "Klipper rp2040 source not found at $RP2040_SRC"
+        error "Is Klipper installed? Run 'cd ~/klipper && git pull' first."
+        exit 1
     else
         # 1. Copy C/H firmware sources into Klipper tree
         for f in stallguard_shared.h core1_stallguard.c stallguard_command.c; do
@@ -250,23 +263,31 @@ else
 
         # 2. Patch Makefile — add src-y lines (idempotent)
         MAKEFILE="$RP2040_SRC/Makefile"
+        if [ ! -f "$MAKEFILE" ]; then
+            error "Makefile not found at $MAKEFILE — cannot patch"
+            exit 1
+        fi
         if grep -q 'core1_stallguard' "$MAKEFILE" 2>/dev/null; then
             info "Makefile already patched (core1_stallguard found)"
         else
             # Append after the last source file line (i2c.c) in the Makefile
-            sed -i '/rp2040\/i2c\.c/a src-y += rp2040/core1_stallguard.c\nsrc-y += rp2040/stallguard_command.c' "$MAKEFILE"
+            "${SED_INPLACE[@]}" '/rp2040\/i2c\.c/a src-y += rp2040/core1_stallguard.c\nsrc-y += rp2040/stallguard_command.c' "$MAKEFILE"
             success "Patched Makefile with StallGuard source files"
         fi
 
         # 3. Patch main.c — add core1_launch() call (idempotent)
         MAIN_C="$RP2040_SRC/main.c"
+        if [ ! -f "$MAIN_C" ]; then
+            error "main.c not found at $MAIN_C — cannot patch"
+            exit 1
+        fi
         if grep -q 'core1_launch' "$MAIN_C" 2>/dev/null; then
             info "main.c already patched (core1_launch found)"
         else
             # Add extern declaration after last #include
-            sed -i '/#include "sched.h"/a /* W26: Core1 StallGuard DIAG pin monitor */\nextern void core1_launch(void);' "$MAIN_C"
+            "${SED_INPLACE[@]}" '/#include "sched.h"/a /* W26: Core1 StallGuard DIAG pin monitor */\nextern void core1_launch(void);' "$MAIN_C"
             # Add core1_launch() call before sched_main()
-            sed -i '/sched_main();/i \    core1_launch();     /* W26: start DIAG monitor on core1 */' "$MAIN_C"
+            "${SED_INPLACE[@]}" '/sched_main();/i \    core1_launch();     /* W26: start DIAG monitor on core1 */' "$MAIN_C"
             success "Patched main.c with core1_launch() call"
         fi
 
@@ -369,7 +390,7 @@ if [ -n "$SERIAL_DEVICE" ]; then
     success "Detected MCU at: $SERIAL_DEVICE"
     # Only update if printer.cfg still has the placeholder
     if grep -q "PLACEHOLDER" "$REPO_DIR/src/klipper/printer.cfg"; then
-        sed -i "s|serial: /dev/serial/by-id/usb-Klipper_rp2040_PLACEHOLDER-if00|serial: $SERIAL_DEVICE|" \
+        "${SED_INPLACE[@]}" "s|serial: /dev/serial/by-id/usb-Klipper_rp2040_PLACEHOLDER-if00|serial: $SERIAL_DEVICE|" \
             "$REPO_DIR/src/klipper/printer.cfg"
         success "Updated printer.cfg serial path to $SERIAL_DEVICE"
     else

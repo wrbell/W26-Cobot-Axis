@@ -11,6 +11,7 @@ Based on docs/register_allocation.md.
 UR30_HOST = "192.168.1.100"          # UR30 controller IP — update for your network
 RTDE_PORT = 30004
 RTDE_FREQUENCY = 500                 # Hz (e-Series default)
+RTDE_CONNECT_TIMEOUT = 5.0           # seconds — caps ur_rtde TCP connect (OS default is 60-120s)
 
 KLIPPY_SOCKET = "/tmp/klippy_uds"    # Klipper Unix domain socket
 
@@ -154,3 +155,9 @@ DASHBOARD_POLL_INTERVAL = 2.0       # seconds between state polls
 DASHBOARD_TIMEOUT = 5.0             # seconds for command response
 UR_PROGRAM_PATH = "/programs/w26_extrusion.urp"  # program to auto-load
 DASHBOARD_AUTO_START = False         # automatically load + play UR program on bridge start
+
+# ---------------------------------------------------------------------------
+# StallGuard accumulator (Enhancement 7 — P7)
+# ---------------------------------------------------------------------------
+SG_ACCUMULATOR_DURATION_S = 300.0       # 5 minutes of history
+SG_ACCUMULATOR_SAMPLE_RATE_HZ = 4.0    # matches STATUS_POLL_INTERVAL

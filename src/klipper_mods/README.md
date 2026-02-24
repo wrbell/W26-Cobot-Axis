@@ -110,7 +110,7 @@ Expected response:
       "stallguard_monitor": {
         "stall_active": false,
         "stall_count": 0,
-        "last_stall_us": 0
+        "last_stall_ticks": 0
       }
     }
   }
@@ -119,3 +119,13 @@ Expected response:
 
 To test: manually stall the motor (block the shaft), then re-query.
 `stall_active` should become `true` and `stall_count` should increment.
+
+## Hardware Notes
+
+**gpio16 shared pin conflict:** On the SKR Pico V1.0, gpio16 is shared
+between the E-stepper TMC2209 DIAG output and the filament runout sensor
+input. When the DIAG jumper is installed for StallGuard monitoring, the
+filament runout sensor on that header cannot be used simultaneously. This
+is a board-level routing limitation, not a software bug. For this project
+(pump-based metal paste extrusion), filament runout sensing is not needed,
+so the conflict has no functional impact.

@@ -2,11 +2,17 @@
 # Install: pip install -r requirements.txt
 #
 # NOTE: ur-rtde requires C++ build tools and Boost.
-# On Raspberry Pi (ARM), install system packages first:
-#   sudo apt-get install -y build-essential cmake libboost-all-dev
+#   Windows: Install Visual Studio Build Tools + vcpkg boost, or use
+#            pre-built wheel: pip install ur-rtde (wheels available for Win x64)
+#   Raspberry Pi (ARM): install system packages first:
+#     sudo apt-get install -y build-essential cmake libboost-all-dev
 #
-# If ur-rtde fails to build from source on ARM, the bridge daemon
-# will fall back to stub mode (no robot connection) -- see
-# src/bridge/rtde_client.py for the fallback logic.
+# If ur-rtde fails to install, the bridge daemon will fall back to stub
+# mode (no real robot connection) -- see src/bridge/rtde_client.py.
 
+# --- Runtime ---
 ur-rtde>=1.5.7,<2.0
+
+# --- Development / Testing (install with: pip install -r requirements.txt) ---
+pytest>=7.0
+ruff>=0.4

@@ -11,6 +11,7 @@ Enhancements (see docs/design/bridge_enhancements.md):
   4. Speed-proportional extrusion — bridge-computed rate from TCP speed
   5. Extrusion profiles — non-linear rate mapping (JSON-configurable)
   6. Dashboard Server — UR30 lifecycle management (port 29999)
+  7. StallGuard accumulator — Pi-side 5-minute history buffer
 
 Usage:
     python -m bridge.bridge_daemon
@@ -33,6 +34,7 @@ from .klipper_status import KlipperStatusPoller
 from .data_logger import DataLogger
 from .extrusion_profile import load_active_profile
 from .dashboard_client import DashboardClient, DashboardPoller
+from .stallguard_accumulator import StallGuardAccumulator
 
 log = logging.getLogger("bridge")
 
@@ -74,7 +76,8 @@ class Bridge:
                  profile_name: str | None = None,
                  enable_dashboard: bool = False,
                  dashboard_auto_start: bool = False,
-                 ur_program: str = config.UR_PROGRAM_PATH):
+                 ur_program: str = config.UR_PROGRAM_PATH,
+                 enable_sg_accumulator: bool = True):
         self.rtde = RTDEClient(host=ur_host)
         self.klipper = KlipperClient(config.KLIPPY_SOCKET)
         self.state = BridgeState()
@@ -115,6 +118,13 @@ class Bridge:
             profile_name=profile_name,
         )
         log.info("Active extrusion profile: %s", self.active_profile)
+
+        # --- Enhancement 7: StallGuard accumulator ---
+        self.sg_accumulator: StallGuardAccumulator | None = None
+        if enable_sg_accumulator and enable_status_poll:
+            self.sg_accumulator = StallGuardAccumulator()
+            if self.status_poller:
+                self.status_poller.set_accumulator(self.sg_accumulator)
 
         # --- Enhancement 6: Dashboard Server ---
         self._enable_dashboard = enable_dashboard
@@ -165,6 +175,11 @@ class Bridge:
         """Cleanly shut down: disable stepper, stop subsystems, disconnect."""
         self._running = False
         log.info("Shutting down bridge...")
+
+        # Log StallGuard accumulator summary before shutdown
+        if self.sg_accumulator:
+            summary = self.sg_accumulator.get_summary()
+            log.info("StallGuard accumulator summary: %s", summary)
 
         # Stop subsystems
         if self.status_poller:
@@ -694,6 +709,10 @@ def main():
     parser.add_argument("--profile-file", default=None,
                         help="Path to extrusion profiles JSON file")
 
+    # Enhancement 7: StallGuard accumulator
+    parser.add_argument("--no-sg-accumulator", action="store_true",
+                        help="Disable the StallGuard history accumulator")
+
     # Enhancement 6: Dashboard Server
     parser.add_argument("--dashboard", action="store_true",
                         help="Enable Dashboard Server integration (port 29999)")
@@ -737,6 +756,7 @@ def main():
         enable_dashboard=enable_dashboard,
         dashboard_auto_start=args.dashboard_auto,
         ur_program=args.ur_program,
+        enable_sg_accumulator=not args.no_sg_accumulator,
     )
 
     # Graceful shutdown on SIGTERM

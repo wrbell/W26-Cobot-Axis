@@ -1,0 +1,27 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install ruff pytest ur_rtde
+
+      - name: Lint
+        run: ruff check src/bridge/
+
+      - name: Test
+        run: python -m pytest src/bridge/tests/ -v
+
+      - name: ShellCheck
+        run: |
+          sudo apt-get install -y shellcheck
+          shellcheck deploy.sh scripts/dev-sync.sh

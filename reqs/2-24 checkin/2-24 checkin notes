@@ -1,0 +1,13 @@
+# Notes from Dr. Pannier
+## For analysis assignment (Canvas due date: 4/2)
+- NEED MATLAB/etc model for load calcs to make sure we’re not overloading motor, UR power supply (V=IR)
+- diffEQ of motor sim to make sure during extrusion ramp, doesn’t overload current
+## Final Prez Layout
+- Intro
+- What Each Thing Is
+- Ex: what is klipper
+- What we built 
+- Why we built it
+- How we built it 
+- Winning 
+

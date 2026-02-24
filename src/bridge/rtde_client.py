@@ -10,6 +10,7 @@ Register mapping: docs/register_allocation.md
 """
 
 import logging
+import socket
 import time
 
 from . import config
@@ -51,10 +52,18 @@ class RTDEClient:
             return
 
         log.info("Connecting to UR30 at %s:%d ...", self.host, config.RTDE_PORT)
-        self._rtde_r = rtde_receive.RTDEReceiveInterface(
-            self.host, self.frequency
-        )
-        self._rtde_c = rtde_control.RTDEControlInterface(self.host)
+        # ur_rtde doesn't expose a connect timeout, so temporarily override
+        # the process-wide default so the underlying TCP handshake won't
+        # block for the OS default (60-120 s) if the controller is unreachable.
+        prev_timeout = socket.getdefaulttimeout()
+        try:
+            socket.setdefaulttimeout(config.RTDE_CONNECT_TIMEOUT)
+            self._rtde_r = rtde_receive.RTDEReceiveInterface(
+                self.host, self.frequency
+            )
+            self._rtde_c = rtde_control.RTDEControlInterface(self.host)
+        finally:
+            socket.setdefaulttimeout(prev_timeout)
         log.info("RTDE connected to %s", self.host)
 
     def disconnect(self) -> None:

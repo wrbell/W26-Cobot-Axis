@@ -39,6 +39,11 @@ class KlipperStatusPoller:
         self._stale_count = 0
         self._tmc_available = True
         self._stallguard_available = True
+        self._sg_accumulator = None
+
+    def set_accumulator(self, accumulator) -> None:
+        """Attach a StallGuardAccumulator to receive samples after each poll."""
+        self._sg_accumulator = accumulator
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -192,3 +197,15 @@ class KlipperStatusPoller:
                 sg_data = status.get("stallguard_monitor", {})
                 if sg_data:
                     self._last_stallguard_status = sg_data
+
+        # Feed accumulator AFTER lock is released (avoids nested locking)
+        if self._sg_accumulator is not None:
+            drv = self._last_tmc_status.get("drv_status", {})
+            sg = drv.get("sg_result", -1)
+            sd = self._last_stallguard_status
+            self._sg_accumulator.record(
+                sg_result=sg if sg is not None else -1,
+                stall_active=bool(sd.get("stall_active", False)),
+                stall_count=sd.get("stall_count", 0),
+                last_stall_ticks=sd.get("last_stall_ticks", 0),
+            )

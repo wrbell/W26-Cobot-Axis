@@ -155,13 +155,13 @@ static void core1_stallguard_main(void)
             sg_lock_release();
         }
 
-        /* Check for clear request from core0 */
+        /* Check for clear request from core0 (under lock to avoid race) */
+        sg_lock_acquire();
         if (sg_shared.clear_request) {
-            sg_lock_acquire();
             sg_shared.stall_count = 0;
             sg_shared.clear_request = 0;
-            sg_lock_release();
         }
+        sg_lock_release();
 
         prev_stall = stalled;
     }
@@ -212,18 +212,18 @@ static uint32_t fifo_pop(void)
  *
  * The RP2040 bootrom puts core1 into a WFE loop waiting for a
  * specific FIFO handshake sequence:
- *   1. Send 0, 0, 1, vector_table, stack_pointer, entry_point
+ *   1. Send 0, 0, 1, vtor, stack_pointer, entry_point
  *   2. Core1 responds with 0 after each pair, then echoes entry
  *
  * This function must be called from core0 before sched_main().
  */
 void core1_launch(void)
 {
-    extern uint32_t _vector_table[];  /* from Klipper's linker script */
+    extern uint32_t _ram_vectortable_start;  /* from rpxxxx_link.lds.S */
 
     uint32_t entry = (uint32_t)core1_stallguard_main;
     uint32_t sp = (uint32_t)&core1_stack[sizeof(core1_stack) / sizeof(uint32_t)];
-    uint32_t vtor = (uint32_t)_vector_table;
+    uint32_t vtor = (uint32_t)&_ram_vectortable_start;
 
     /* Sequence values to send to bootrom */
     uint32_t seq[] = { 0, 0, 1, vtor, sp, entry };

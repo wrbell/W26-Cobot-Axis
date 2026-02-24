@@ -13,9 +13,9 @@ Installation:
     Add [stallguard_monitor] section to printer.cfg
 
 Status object fields (available via objects/query):
-    stall_active   - bool: True if DIAG pin is currently asserted
-    stall_count    - int: cumulative stall events since last clear
-    last_stall_us  - int: microsecond timestamp of last stall edge
+    stall_active       - bool: True if DIAG pin is currently asserted
+    stall_count        - int: cumulative stall events since last clear
+    last_stall_ticks   - int: MCU timer ticks at last stall edge
 """
 
 import logging
@@ -37,11 +37,15 @@ class StallGuardMonitor:
         # State
         self.stall_active = False
         self.stall_count = 0
-        self.last_stall_us = 0
+        self.last_stall_ticks = 0
         self._mcu = None
         self._cmd_query = None
         self._cmd_clear = None
         self._poll_timer = None
+        self._error_count = 0
+
+        # Register with Klipper's object system so Moonraker can find us
+        self.printer.add_object(self.name, self)
 
         # Register event handlers
         self.printer.register_event_handler(
@@ -53,17 +57,23 @@ class StallGuardMonitor:
 
     def _handle_connect(self):
         """Called when klippy connects to the MCU."""
-        # Get the MCU object
         self._mcu = self.printer.lookup_object("mcu")
 
-        # Register MCU commands
-        self._cmd_query = self._mcu.lookup_command("stallguard_query")
+        # Allocate a command queue so stallguard queries don't compete
+        # with stepper commands on the default queue.
+        cmd_queue = self._mcu.alloc_command_queue()
+
+        # Register MCU commands — if firmware overlay is missing, these
+        # will raise and Klipper will log a clear error at startup.
+        self._cmd_query = self._mcu.lookup_command(
+            "stallguard_query", cq=cmd_queue
+        )
         self._mcu.register_response(
             self._handle_stallguard_state, "stallguard_state"
         )
-
-        # Look up clear command (fire-and-forget)
-        self._cmd_clear = self._mcu.lookup_command("stallguard_clear")
+        self._cmd_clear = self._mcu.lookup_command(
+            "stallguard_clear", cq=cmd_queue
+        )
 
         # Start polling timer
         self._poll_timer = self.reactor.register_timer(
@@ -84,15 +94,22 @@ class StallGuardMonitor:
         """Timer callback: send a stallguard_query to the MCU."""
         try:
             self._cmd_query.send()
+            self._error_count = 0
         except Exception:
-            logging.exception("StallGuard query failed")
+            self._error_count += 1
+            if self._error_count <= 3:
+                logging.exception("StallGuard query failed")
+            elif self._error_count == 4:
+                logging.error(
+                    "StallGuard query failing repeatedly — suppressing"
+                )
         return eventtime + self.poll_interval
 
     def _handle_stallguard_state(self, params):
         """Handle stallguard_state response from MCU."""
         self.stall_active = bool(params.get("stall_active", 0))
         self.stall_count = params.get("stall_count", 0)
-        self.last_stall_us = params.get("last_stall_ticks", 0)
+        self.last_stall_ticks = params.get("last_stall_ticks", 0)
 
     def clear_stall_count(self):
         """Request core1 to reset the stall counter."""
@@ -104,7 +121,7 @@ class StallGuardMonitor:
         return {
             "stall_active": self.stall_active,
             "stall_count": self.stall_count,
-            "last_stall_us": self.last_stall_us,
+            "last_stall_ticks": self.last_stall_ticks,
         }
 
 

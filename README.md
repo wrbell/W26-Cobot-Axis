@@ -1,3 +1,5 @@
+![CI](../../actions/workflows/ci.yml/badge.svg)
+
 # W26 Cobot Axis — UR30 7th Axis for Metal Paste Dispensing
 
 **Course:** ME 472 — Mechatronics, Winter 2026, University of Michigan
@@ -49,7 +51,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 
 ---
 
-## Current Progress (as of Feb 12, 2026 — Week 6)
+## Current Progress (as of Feb 24, 2026 — Week 8)
 
 ### Status Summary
 
@@ -57,9 +59,12 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 |------|--------|
 | **Phase 1: Ideation** | Complete |
 | **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
-| **Software development** | All source code written and unit tested (156 tests passing, clean lint). Waiting on hardware for integration. |
-| **Phase 2 memo drafts** | 7 rough drafts in `docs/phase2/`: block diagram, circuit schematic, pin table, power budget, buck converter selection, BOM (~$183, most P/Ns verified), and full memo text (~1,400 words). |
-| **Phase 3: Build** | Not started — waiting on hardware receipt |
+| **Software development** | All source code written and unit tested (335 tests passing, clean lint). StallGuard dual-core firmware written. Waiting on hardware for integration. |
+| **StallGuard firmware** | Written — RP2040 core1 DIAG pin monitor (C firmware + klippy extras + patches). Verified against real Klipper source tree. |
+| **Deploy tooling** | Written — `deploy.sh` (11-step + StallGuard overlay), `scripts/dev-sync.sh` (fast rsync for iterative dev) |
+| **HITL test plan** | Written — `docs/design/hitl_plan.md` with TP-06 StallGuard procedures, URSim dev bench topology, deploy workflow |
+| **Phase 2 memo drafts** | 7 rough drafts in `docs/phase2/` — ready for draw.io/KiCad redraw and Word compilation |
+| **Phase 3: Build** | Not started — hardware arriving soon, deploy tooling ready |
 | **Phase 4: Test** | Not started — depends on Phase 3 |
 
 ### What's Done
@@ -68,7 +73,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - Problem analysis, latency analysis, RTDE register allocation — all complete
 - 3 trade studies with weighted scoring: Klipper (4.70), RTDE (4.85), SKR Pico (selected)
 - Formal design specification — 25 "shall" statements, interface tables, performance targets
-- 13 design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, Phase 2 memo outline, final report outline, and stepper driving
+- 13+ design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, HITL testing, and stepper driving
 - Stepper driving design — consolidated justification for `[manual_stepper]`, TMC2209 config, step generation pipeline
 
 **Phase 2 Memo Rough Drafts (all in `docs/phase2/`):**
@@ -83,10 +88,23 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 **Source Code (all in `src/`):**
 - Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
 - Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client
-- Unit tests: 156 tests across 3 test files, all passing, clean ruff lint
-- Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209), `moonraker.conf`, `mainsail.cfg` (pump macros)
-- URScript: extrusion control library, system validation test (9 sub-tests), pump calibration test (4 sub-tests)
-- Deployment: `requirements.txt`, systemd service, 11-step deploy script, full setup guide
+- Unit tests: 335 tests across 10 test files, all passing, clean ruff lint
+- Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209, stallguard_monitor), `moonraker.conf`, `mainsail.cfg` (pump macros)
+- URScript: extrusion control library, system validation test (10 sub-tests), pump calibration test (5 sub-tests)
+- Deployment: `requirements.txt`, systemd service, 11-step deploy script (with StallGuard overlay), full setup guide, dev-sync script
+
+**StallGuard Dual-Core Firmware (`src/klipper_mods/`):**
+- RP2040 core1 DIAG pin monitor — tight polling loop with debounce, spinlock-protected shared SRAM
+- Klipper MCU commands (`stallguard_query`, `stallguard_clear`) via `DECL_COMMAND`
+- Klippy host module (`stallguard_monitor.py`) — 20 Hz polling, Moonraker status object
+- Makefile and main.c patches — verified against real Klipper source in `vendor/klipper/`
+- `deploy.sh` Step 6b automates overlay deployment (idempotent)
+
+**HITL Test Plan (`docs/design/hitl_plan.md`):**
+- TP-06: 5-part StallGuard test procedure with pass/fail criteria and data sheets
+- URSim dev bench topology: Windows laptop (Docker URSim) ↔ Pi ↔ SKR Pico
+- 8-stage test sequence from bare Pi to full chain
+- Deploy workflow documentation (full deploy vs dev-sync)
 
 ### What's Remaining
 
@@ -102,15 +120,18 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - [ ] Present trade studies to Prof. Pannier
 
 **Phase 3 — hardware integration (target Mar 8–22):**
-- [ ] Flash Klipper firmware onto SKR Pico
+- [ ] Flash Klipper firmware onto SKR Pico (deploy.sh handles this)
 - [ ] Install Klipper + Moonraker on Pi
-- [ ] Deploy configs and bridge daemon to Pi
+- [ ] Deploy configs, bridge daemon, and StallGuard overlay to Pi
+- [ ] Verify StallGuard firmware builds with overlay (`make` in Klipper tree)
+- [ ] Test stepper motion + StallGuard DIAG detection
 - [ ] End-to-end smoke test: UR30 → stepper moves
-- [ ] Set up URSim on Windows for integration testing
+- [ ] Set up URSim on Windows for RTDE integration testing
 - [ ] Mechanical assembly (Dawood)
 
 **Phase 4 — testing and reporting (target Mar 23–31):**
 - [ ] End-to-end functional test, latency characterization, accuracy test
+- [ ] StallGuard HITL testing (TP-06 from `docs/design/hitl_plan.md`)
 - [ ] Fault handling and endurance testing
 - [ ] Final report (≤2000 words, due Apr 23)
 - [ ] Oral presentation (Apr 24)
@@ -170,20 +191,37 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   │   ├── data_logger.py         # 17-column CSV logging with rotation
 │   │   ├── extrusion_profile.py   # Linear/polynomial/lookup profiles
 │   │   ├── dashboard_client.py    # UR30 Dashboard Server (port 29999)
+│   │   ├── stallguard_accumulator.py # Pi-side StallGuard history buffer
 │   │   ├── profiles.json          # Pre-defined extrusion profiles
-│   │   └── tests/                 # pytest suite (156 tests)
-│   │       ├── conftest.py        # Shared fixtures (FakeKlippy, mock sockets)
+│   │   └── tests/                 # pytest suite (335 tests)
+│   │       ├── conftest.py              # Shared fixtures (FakeKlippy, mock sockets)
+│   │       ├── test_bridge_daemon.py    # 71 tests
+│   │       ├── test_dashboard_client.py # 25 tests
+│   │       ├── test_data_logger.py      # 17 tests
+│   │       ├── test_extrusion_profile.py # 39 tests
 │   │       ├── test_klipper_client.py   # 42 tests
-│   │       ├── test_rtde_client.py      # 34 tests
-│   │       └── test_bridge_daemon.py    # 71 tests
+│   │       ├── test_rtde_client.py      # 43 tests
+│   │       ├── test_stallguard.py       # 25 tests
+│   │       ├── test_config.py                # 24 tests
+│   │       ├── test_stallguard_accumulator.py # 34 tests
+│   │       └── test_watchdog.py         # 15 tests
 │   ├── klipper/                   # Klipper configuration files
-│   │   ├── printer.cfg            # SKR Pico, manual_stepper pump, TMC2209
+│   │   ├── printer.cfg            # SKR Pico, manual_stepper pump, TMC2209, stallguard_monitor
 │   │   ├── moonraker.conf         # Moonraker API (port 7125, auth, updates)
 │   │   └── mainsail.cfg           # Pump macros (PUMP_STATUS, PUMP_TEST, etc.)
+│   ├── klipper_mods/              # StallGuard dual-core firmware overlay
+│   │   ├── stallguard_shared.h    # Shared SRAM struct + spinlock #16 helpers
+│   │   ├── core1_stallguard.c     # Core1 entry: gpio16 init, debounce loop, FIFO launch
+│   │   ├── stallguard_command.c   # Klipper DECL_COMMAND: stallguard_query, stallguard_clear
+│   │   ├── Makefile.patch         # Add .c files to Klipper rp2040 build
+│   │   ├── main.c.patch           # Call core1_launch() before sched_main()
+│   │   ├── klippy_extras/         # Host-side Klipper module
+│   │   │   └── stallguard_monitor.py  # 20 Hz polling, Moonraker status object
+│   │   └── README.md              # Build & deploy instructions
 │   ├── urscript/                  # URScript programs for UR30
 │   │   ├── extrusion_control.script  # Helper functions, speed-sync, retraction
-│   │   ├── test_basic.script         # System validation (9 sub-tests)
-│   │   └── test_calibration.script   # Pump calibration (4 sub-tests)
+│   │   ├── test_basic.script         # System validation (10 sub-tests)
+│   │   └── test_calibration.script   # Pump calibration (5 sub-tests)
 │   └── systemd/
 │       └── w26-bridge.service     # systemd unit for bridge daemon
 ├── trades/                        # Trade studies (weighted scoring)
@@ -230,7 +268,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   ├── phase3.md
 │   ├── process.md
 │   └── information_needs.md
-├── deploy.sh                      # 11-step idempotent deployment script
+├── scripts/
+│   └── dev-sync.sh                # Fast rsync to Pi for iterative development
+├── vendor/                        # Vendored dependencies (git-ignored)
+│   └── klipper/                   # Klipper source (shallow clone for patch verification)
+├── .github/workflows/
+│   ├── ci.yml                     # Tier 1: lint + test + shellcheck on every push
+│   └── firmware.yml               # Tier 2: firmware build on klipper_mods changes
+├── .gitignore                     # Ignores vendor/, __pycache__, .DS_Store, etc.
+├── deploy.sh                      # 11-step idempotent deployment script (+ StallGuard overlay)
 ├── SETUP.md                       # Fresh Pi setup guide
 └── requirements.txt               # Python dependencies (ur-rtde)
 ```
@@ -242,15 +288,23 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | Component | Location | Tests |
 |-----------|----------|-------|
 | Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` | 71 tests |
-| Bridge config (registers, constants) | `src/bridge/config.py` | — |
+| Bridge config (registers, constants) | `src/bridge/config.py` | — (constants) |
 | Klipper Unix socket client | `src/bridge/klipper_client.py` | 42 tests |
-| RTDE client wrapper | `src/bridge/rtde_client.py` | 34 tests |
-| Klipper printer config | `src/klipper/printer.cfg` | — |
-| Moonraker config | `src/klipper/moonraker.conf` | — |
-| Mainsail pump macros | `src/klipper/mainsail.cfg` | — |
-| URScript extrusion program | `src/urscript/extrusion_control.script` | — |
-| URScript system validation | `src/urscript/test_basic.script` | — |
-| URScript pump calibration | `src/urscript/test_calibration.script` | — |
+| RTDE client wrapper | `src/bridge/rtde_client.py` | 43 tests |
+| StallGuard status integration | `src/bridge/klipper_status.py` | 25 tests |
+| Watchdog timer | `src/bridge/watchdog.py` | 15 tests |
+| Data logger | `src/bridge/data_logger.py` | 17 tests |
+| Extrusion profiles | `src/bridge/extrusion_profile.py` | 39 tests |
+| Dashboard client | `src/bridge/dashboard_client.py` | 25 tests |
+| StallGuard accumulator | `src/bridge/stallguard_accumulator.py` | 30 tests |
+| Klipper printer config | `src/klipper/printer.cfg` | — (config) |
+| Moonraker config | `src/klipper/moonraker.conf` | — (config) |
+| Mainsail pump macros | `src/klipper/mainsail.cfg` | — (config) |
+| Core1 StallGuard firmware | `src/klipper_mods/` (3 C/H files) | — (C, needs hardware) |
+| StallGuard klippy module | `src/klipper_mods/klippy_extras/stallguard_monitor.py` | — (Klipper runtime) |
+| URScript extrusion program | `src/urscript/extrusion_control.script` | — (URScript) |
+| URScript system validation | `src/urscript/test_basic.script` | — (URScript) |
+| URScript pump calibration | `src/urscript/test_calibration.script` | — (URScript) |
 
 ### Design and Analysis
 
@@ -262,6 +316,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | [`docs/register_allocation.md`](docs/register_allocation.md) | RTDE register mapping — 6 output, 5 input registers |
 | [`docs/latency_analysis.md`](docs/latency_analysis.md) | End-to-end latency analysis (~8ms typical) |
 | [`docs/design/stepper_driving.md`](docs/design/stepper_driving.md) | How Klipper drives the stepper — consolidated justification |
+| [`docs/design/hitl_plan.md`](docs/design/hitl_plan.md) | HITL test plan: StallGuard TP-06, URSim dev bench, deploy workflow |
 | [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | Trade study: Klipper (4.70) vs Lingua Franca (1.95) |
 | [`trades/comms.md`](trades/comms.md) | Trade study: RTDE vs alternative protocols |
 | [`trades/mcu.md`](trades/mcu.md) | Trade study: SKR Pico vs alternatives |

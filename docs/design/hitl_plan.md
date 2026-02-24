@@ -3,7 +3,7 @@
 **W26 Cobot Axis -- ME472 Mechatronics Capstone**
 **Author:** Willem (Software/EE)
 **Date:** 2026-02-24
-**Status:** Pre-hardware (all software mock-tested, 181 tests passing)
+**Status:** Pre-hardware (all software mock-tested, 335 tests passing)
 
 ---
 
@@ -24,7 +24,7 @@
 
 ### Purpose
 
-All bridge daemon, Klipper status, and RTDE client software has been written and tested against mocks (181 tests passing, clean ruff lint). This document bridges the gap between mock-tested software and real hardware by:
+All bridge daemon, Klipper status, and RTDE client software has been written and tested against mocks (335 tests passing, clean ruff lint). This document bridges the gap between mock-tested software and real hardware by:
 
 1. Extending the existing 8-stage integration plan (`docs/design/integration_plan.md`) with StallGuard firmware overlay steps at each relevant stage.
 2. Adding a formal test procedure (TP-06) for StallGuard validation, following the format of TP-01 through TP-05 in `docs/design/test_procedures.md`.
@@ -112,7 +112,7 @@ The following amendments add StallGuard overlay work to the existing integration
 **Verification:**
 
 - `stallguard_query` command responds via Moonraker API.
-- Response shows `stall_active: false`, `stall_count: 0`, `last_stall_us: 0`.
+- Response shows `stall_active: false`, `stall_count: 0`, `last_stall_ticks: 0`.
 - Even without the DIAG jumper installed yet, the query must succeed (stall_count stays 0).
 - `/tmp/klippy.log` contains `StallGuard monitor started` with no errors.
 
@@ -294,11 +294,11 @@ The following amendments add StallGuard overlay work to the existing integration
 
 | Step | Action | Expected Result | Record |
 |------|--------|-----------------|--------|
-| 1 | Motor idle. Query `stallguard_monitor` via Moonraker API: `curl http://localhost:7125/printer/objects/query?stallguard_monitor` | `stall_active: false`, `stall_count: 0`, `last_stall_us: 0` | API response JSON |
+| 1 | Motor idle. Query `stallguard_monitor` via Moonraker API: `curl http://localhost:7125/printer/objects/query?stallguard_monitor` | `stall_active: false`, `stall_count: 0`, `last_stall_ticks: 0` | API response JSON |
 | 2 | Connect scope CH1 to gpio16 (DIAG pin). Verify pin is HIGH (pulled up, no stall). | Steady HIGH ~3.3V | Scope screenshot: `TP06A_step2_diag_idle.png` |
 | 3 | Run motor at 20 mm/s: `MANUAL_STEPPER STEPPER=pump MOVE=1000 SPEED=20`. Monitor gpio16 on scope. | Pin stays HIGH during normal operation | Scope trace: `TP06A_step3_diag_running.png` |
 | 4 | Block motor shaft with soft grip. Observe scope. | gpio16 drops LOW within microseconds of stall. | Scope capture with time cursor measuring assertion delay: `TP06A_step4_diag_stall.png` |
-| 5 | Query `stallguard_monitor` again. | `stall_active: true`, `stall_count: 1`, `last_stall_us > 0` | API response JSON |
+| 5 | Query `stallguard_monitor` again. | `stall_active: true`, `stall_count: 1`, `last_stall_ticks > 0` | API response JSON |
 | 6 | Release motor shaft. Wait 1 second. Query again. | `stall_active: false` (DIAG de-asserts when motor moves freely). `stall_count` still 1. | API response JSON |
 | 7 | Block motor shaft again. Query. | `stall_count: 2` | Verify cumulative counting |
 | 8 | Send `stallguard_clear` command (via Moonraker or klippy console). Query. | `stall_count: 0` | Verify clear works |
