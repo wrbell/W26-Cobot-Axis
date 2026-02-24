@@ -24,7 +24,7 @@ jobs:
         run: pip install ruff pytest pytest-cov ur_rtde
 
       - name: Lint
-        run: ruff check src/bridge/
+        run: ruff check src/bridge/ --output-format=github
 
       - name: Test with coverage
         run: |
@@ -79,6 +79,9 @@ jobs:
 
       - name: Install dependencies
         run: pip install mypy ur_rtde
+
+      - name: Register mypy problem matcher
+        run: echo "::add-matcher::.github/matchers/mypy.json"
 
       - name: Type check
         run: mypy src/bridge/ --exclude tests/

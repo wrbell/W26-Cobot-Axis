@@ -9,9 +9,8 @@ How to set up a local development and testing environment on your own machine. N
 ```bash
 git clone https://github.com/<your-org>/W26-Cobot-Axis.git
 cd W26-Cobot-Axis
-pip install -r requirements.txt
-python -m pytest src/bridge/tests/ -v      # 335 tests, <1s
-ruff check src/bridge/                     # lint
+make install                               # pip install + pre-commit hooks
+make check                                 # lint + test + typecheck + yamllint + spellcheck
 ```
 
 That's it. All tests pass without any hardware connected.
@@ -25,8 +24,9 @@ That's it. All tests pass without any hardware connected.
 | Python | 3.10+ | Yes |
 | pip | latest | Yes |
 | git | any | Yes |
+| make | any | Recommended -- provides `make check`, `make test`, etc. |
 | shellcheck | any | Optional -- only for linting `deploy.sh` and `dev-sync.sh` |
-| Docker | any | Optional -- only for running URSim |
+| Docker | any | Optional -- only for running URSim or `act` (local CI) |
 
 ---
 
@@ -127,6 +127,84 @@ Ruff checks for: unused imports, undefined names, style issues, common bugs, and
 
 ---
 
+## Makefile
+
+A `Makefile` provides single-command entry points for all development tasks:
+
+| Command | What it does |
+|---------|-------------|
+| `make lint` | Ruff lint check |
+| `make fmt` | Ruff auto-fix |
+| `make test` | pytest with coverage |
+| `make typecheck` | mypy type check |
+| `make spellcheck` | codespell spell check |
+| `make yamllint` | Lint workflow YAML |
+| `make check` | All of the above (lint + test + typecheck + yamllint + spellcheck) |
+| `make install` | `pip install -r requirements.txt` + `pre-commit install` |
+| `make clean` | Remove `__pycache__`, `.mypy_cache`, `.coverage`, etc. |
+| `make ci-local` | Run CI locally via `act` (requires Docker) |
+
+Run `make check` before pushing to catch most CI failures locally.
+
+---
+
+## Pre-commit Hooks
+
+Pre-commit hooks run automatically on `git commit` to catch issues before they reach CI. They're configured in `.pre-commit-config.yaml`.
+
+**Setup (one-time):**
+
+```bash
+make install          # or: pip install pre-commit && pre-commit install
+```
+
+**What runs on each commit:**
+
+| Hook | What it checks |
+|------|---------------|
+| ruff | Lint (`src/bridge/`) |
+| mypy | Type check (`src/bridge/`, excluding tests) |
+| yamllint | Workflow YAML syntax (`.github/workflows/`) |
+| codespell | Spelling errors across the repo |
+
+**Run all hooks manually (without committing):**
+
+```bash
+pre-commit run --all-files
+```
+
+**Skip hooks for a quick commit (not recommended):**
+
+```bash
+git commit --no-verify -m "WIP"
+```
+
+---
+
+## Running CI Locally with `act`
+
+[`act`](https://github.com/nektos/act) runs GitHub Actions workflows locally using Docker. This is optional -- `make check` covers the most important checks without Docker.
+
+**Install:**
+
+```bash
+brew install act      # macOS
+# or see https://github.com/nektos/act#installation
+```
+
+**Run the lint-and-test job:**
+
+```bash
+make ci-local         # or: act -j lint-and-test --matrix python-version:3.11
+```
+
+**Notes:**
+- Requires Docker running locally
+- The firmware build job (`firmware.yml`) won't run well locally -- ARM cross-compilation in Docker is slow and unnecessary. Use `make check` instead.
+- `.actrc` configures the default Docker image and secrets
+
+---
+
 ## Stub Mode (No Hardware)
 
 The bridge daemon is designed to work without a UR30 robot or SKR Pico connected. When `ur-rtde` is not installed (or fails to import), the RTDE client falls back to a stub:
@@ -214,9 +292,9 @@ git apply ../../src/klipper_mods/main.c.patch --check
 The typical edit-test-lint-push cycle:
 
 1. **Edit** source files in `src/bridge/`
-2. **Test** -- `python -m pytest src/bridge/tests/ -v`
-3. **Lint** -- `ruff check src/bridge/`
-4. **Commit and push** -- CI runs automatically
+2. **Check** -- `make check` (runs lint + test + typecheck + yamllint + spellcheck)
+3. **Commit** -- pre-commit hooks catch remaining issues automatically
+4. **Push** -- CI runs the full matrix on GitHub
 
 CI (GitHub Actions) runs the same checks on every push and pull request:
 - Tier 1: `ruff check` + `pytest` + `shellcheck` on deploy scripts
@@ -269,12 +347,18 @@ See the script header in [`scripts/dev-sync.sh`](scripts/dev-sync.sh) for option
 
 | Command | What it does |
 |---------|-------------|
+| `make check` | Run all checks (lint + test + typecheck + yamllint + spellcheck) |
+| `make test` | Run all 335 tests with coverage |
+| `make lint` | Ruff lint check |
+| `make fmt` | Ruff auto-fix |
+| `make typecheck` | mypy type check |
+| `make install` | Install deps + pre-commit hooks |
+| `make clean` | Remove caches and build artifacts |
+| `make ci-local` | Run CI locally via `act` (requires Docker) |
+| `pre-commit run --all-files` | Run all pre-commit hooks manually |
 | `python -m pytest src/bridge/tests/ -v` | Run all 335 tests (verbose) |
-| `python -m pytest src/bridge/tests/ -q` | Run all tests (quiet -- just pass/fail) |
 | `python -m pytest src/bridge/tests/test_bridge_daemon.py -v` | Run one test file |
 | `python -m pytest src/bridge/tests/test_bridge_daemon.py::test_idle_mode -v` | Run one test |
-| `ruff check src/bridge/` | Lint check |
-| `ruff check src/bridge/ --fix` | Lint with auto-fix |
 | `python -m bridge` | Start bridge daemon (needs RTDE + Klipper) |
 | `./deploy.sh` | Full deployment to Pi (11 steps) |
 | `./scripts/dev-sync.sh pi@w26-pi.local` | Fast rsync to Pi |
