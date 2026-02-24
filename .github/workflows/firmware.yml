@@ -79,6 +79,10 @@ jobs:
             fi
           done
           if [ "$missing" -eq 1 ]; then
+            echo ""
+            echo "Debug: all symbols containing 'stallguard' or 'core1':"
+            arm-none-eabi-nm klipper/out/klipper.elf | grep -iE "stallguard|core1" || echo "  (none found)"
+            echo ""
             echo "FAIL: overlay symbols not found in ELF"
             exit 1
           fi
