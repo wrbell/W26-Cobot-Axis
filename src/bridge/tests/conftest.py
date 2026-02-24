@@ -8,6 +8,8 @@ Provides:
     - bridge_state: Fresh BridgeState instance
 """
 
+from __future__ import annotations
+
 import json
 import socket
 

@@ -12,6 +12,8 @@ newline.
 Reference: docs/design/bridge_enhancements.md, Section 6.
 """
 
+from __future__ import annotations
+
 import logging
 import socket
 import threading

@@ -15,6 +15,8 @@ Profiles are loaded from a JSON file (default: profiles.json).
 Reference: docs/design/bridge_enhancements.md, Section 5.
 """
 
+from __future__ import annotations
+
 import bisect
 import json
 import logging

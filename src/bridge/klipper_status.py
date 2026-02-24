@@ -12,6 +12,8 @@ and supplement with the commanded rate as the best estimate.
 Reference: docs/design/bridge_enhancements.md, Section 1.
 """
 
+from __future__ import annotations
+
 import logging
 import threading
 

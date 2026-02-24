@@ -7,6 +7,8 @@ Protocol: newline-delimited JSON terminated by \\x03 (ETX).
 Reference: docs/klipper_protocols.md, Sections 2 & 6.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import socket

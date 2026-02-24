@@ -21,6 +21,8 @@ Usage:
 Reference: docs/register_allocation.md for register mapping.
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import signal
