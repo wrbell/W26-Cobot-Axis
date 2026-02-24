@@ -7,6 +7,26 @@ on:
   workflow_call:
 
 jobs:
+  cppcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: sudo apt-get install -y cppcheck
+
+      - name: Static analysis
+        run: |
+          cppcheck \
+            --enable=warning,style,performance,portability \
+            --error-exitcode=1 \
+            --suppress=missingIncludeSystem \
+            --suppress=constParameterCallback \
+            --suppress=unusedStructMember \
+            --inline-suppr \
+            -I src/klipper_mods/ \
+            src/klipper_mods/*.c src/klipper_mods/*.h
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -46,41 +66,134 @@ jobs:
       - name: Build firmware
         run: cd klipper && make olddefconfig && make -j$(nproc)
 
+      - name: Symbol verification
+        run: |
+          echo "=== Verifying W26 overlay symbols ==="
+          missing=0
+          for sym in core1_launch command_stallguard_query command_stallguard_clear; do
+            if arm-none-eabi-nm klipper/out/klipper.elf | grep -q " T ${sym}$"; then
+              echo "  OK: ${sym}"
+            else
+              echo "  MISSING: ${sym}"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "FAIL: overlay symbols not found in ELF"
+            exit 1
+          fi
+          echo "All overlay symbols present"
+
       - name: Firmware size check
         run: |
           echo "=== Firmware ELF size ==="
           arm-none-eabi-size klipper/out/klipper.elf
-          # Parse .data + .bss (columns 2 and 3 from size output)
-          read -r _ data bss _ <<< "$(arm-none-eabi-size klipper/out/klipper.elf | tail -1)"
+
+          # Parse size output columns: text, data, bss
+          read -r text data bss _ <<< "$(arm-none-eabi-size klipper/out/klipper.elf | tail -1)"
+
           sram_used=$((data + bss))
           sram_kb=$((sram_used / 1024))
           sram_pct=$((sram_used * 100 / 270336))
+
+          flash_used=$((text + data))
+          flash_kb=$((flash_used / 1024))
+          # W25Q080 = 2 MB total, bootloader uses ~16 KB, budget = 1900 KB
+          flash_budget=1945600
+          flash_pct=$((flash_used * 100 / 2097152))
+
           echo ""
-          echo "SRAM usage: ${sram_kb} KB / 264 KB (.data=${data}, .bss=${bss})"
+          echo "SRAM usage:  ${sram_kb} KB / 264 KB (.data=${data}, .bss=${bss})"
+          echo "Flash usage: ${flash_kb} KB / 2048 KB (.text=${text}, .data=${data})"
 
           # Job summary
           {
             echo "### Firmware Size"
             echo ""
+            echo "| Region | Used | Budget | % |"
+            echo "|--------|------|--------|---|"
+            echo "| SRAM (.data+.bss) | ${sram_kb} KB | 264 KB | ${sram_pct}% |"
+            echo "| Flash (.text+.data) | ${flash_kb} KB | 2048 KB | ${flash_pct}% |"
+            echo ""
             echo "| Section | Bytes |"
             echo "|---------|-------|"
+            echo "| .text | ${text} |"
             echo "| .data | ${data} |"
             echo "| .bss | ${bss} |"
-            echo "| **SRAM total** | **${sram_kb} KB / 264 KB (${sram_pct}%)** |"
-            echo ""
-            if [ "$sram_used" -gt 204800 ]; then
-              echo "> **FAIL:** exceeds 200 KB budget"
-            else
-              echo "> **PASS:** within 200 KB budget"
-            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-          # Fail if SRAM usage exceeds 200 KB budget
+          # SRAM budget gate: 200 KB
           if [ "$sram_used" -gt 204800 ]; then
-            echo "FAIL: SRAM usage ${sram_kb} KB exceeds 200 KB budget"
+            echo ">> FAIL: SRAM ${sram_kb} KB exceeds 200 KB budget" | tee -a "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
-          echo "PASS: SRAM usage within budget"
+          # Flash budget gate: 1900 KB
+          if [ "$flash_used" -gt "$flash_budget" ]; then
+            echo ">> FAIL: Flash ${flash_kb} KB exceeds 1900 KB budget" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "> **PASS:** within SRAM and flash budgets" >> "$GITHUB_STEP_SUMMARY"
+          echo "PASS: within SRAM and flash budgets"
+
+      - name: Stack usage analysis
+        run: |
+          echo "=== Stack usage for W26 overlay functions ==="
+          # Rebuild just our files with -fstack-usage
+          cd klipper
+          arm-none-eabi-gcc -fstack-usage -c \
+            -I out/ -I src/ -I src/rp2040/ -I lib/rp2040/pico_sdk/src/rp2040/hardware_regs/include/ \
+            -I lib/rp2040/pico_sdk/src/rp2_common/hardware_irq/include/ \
+            -I lib/rp2040/pico_sdk/src/common/pico_base_headers/include/ \
+            -I lib/rp2040/pico_sdk/src/rp2040/pico_platform/include/ \
+            -mcpu=cortex-m0plus -mthumb \
+            -DLIB_PICO_PLATFORM_PANIC="" \
+            -o /dev/null src/rp2040/core1_stallguard.c 2>/dev/null || true
+          arm-none-eabi-gcc -fstack-usage -c \
+            -I out/ -I src/ -I src/rp2040/ -I lib/rp2040/pico_sdk/src/rp2040/hardware_regs/include/ \
+            -I lib/rp2040/pico_sdk/src/rp2_common/hardware_irq/include/ \
+            -I lib/rp2040/pico_sdk/src/common/pico_base_headers/include/ \
+            -I lib/rp2040/pico_sdk/src/rp2040/pico_platform/include/ \
+            -mcpu=cortex-m0plus -mthumb \
+            -DLIB_PICO_PLATFORM_PANIC="" \
+            -o /dev/null src/rp2040/stallguard_command.c 2>/dev/null || true
+          cd ..
+
+          # Display .su files if generated
+          found=0
+          for su in klipper/src/rp2040/*.su; do
+            [ -f "$su" ] || continue
+            found=1
+            echo ""
+            echo "--- $(basename "$su") ---"
+            cat "$su"
+          done
+
+          if [ "$found" -eq 0 ]; then
+            echo "(stack usage files not generated — include paths may differ on CI)"
+            echo "Falling back to nm-based stack estimate..."
+            echo ""
+            # At minimum, report the core1 stack array size
+            arm-none-eabi-nm --size-sort klipper/out/klipper.elf | grep -i stallguard || true
+            arm-none-eabi-nm --size-sort klipper/out/klipper.elf | grep core1 || true
+          fi
+
+          # Summary
+          {
+            echo ""
+            echo "### Stack Usage"
+            echo ""
+            if [ "$found" -eq 1 ]; then
+              echo '```'
+              for su in klipper/src/rp2040/*.su; do
+                [ -f "$su" ] && cat "$su"
+              done
+              echo '```'
+            else
+              echo "Stack usage data not available (include path mismatch)."
+              echo "Will be verified on hardware with \`arm-none-eabi-size --format=sysv\`."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
