@@ -13,15 +13,105 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install ruff pytest ur_rtde
+        run: pip install ruff pytest pytest-cov ur_rtde
 
       - name: Lint
         run: ruff check src/bridge/
 
-      - name: Test
-        run: python -m pytest src/bridge/tests/ -v
+      - name: Test with coverage
+        run: |
+          python -m pytest src/bridge/tests/ -v \
+            --cov=src/bridge \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
       - name: ShellCheck
         run: |
           sudo apt-get install -y shellcheck
           shellcheck deploy.sh scripts/dev-sync.sh
+
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install yamllint
+        run: pip install yamllint
+
+      - name: Lint workflow YAML
+        run: yamllint .github/workflows/
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install ur_rtde pytest pytest-cov ruff
+
+      - name: Audit dependencies
+        run: |
+          pip install pip-audit
+          pip-audit
+
+  link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check markdown links
+        run: |
+          python3 << 'PYEOF'
+          import os, re, sys
+
+          broken = []
+          link_re = re.compile(r'\[([^\]]*)\]\(([^)]+)\)')
+          # Matches content inside backticks (inline code spans)
+          code_span_re = re.compile(r'`[^`]+`')
+
+          for root, dirs, files in os.walk('.'):
+              # Skip hidden dirs and vendor
+              dirs[:] = [d for d in dirs if not d.startswith('.') and d != 'vendor']
+              for fname in files:
+                  if not fname.endswith('.md'):
+                      continue
+                  fpath = os.path.join(root, fname)
+                  with open(fpath, 'r', errors='replace') as f:
+                      for lineno, line in enumerate(f, 1):
+                          # Strip inline code spans to avoid false positives
+                          stripped = code_span_re.sub('', line)
+                          for match in link_re.finditer(stripped):
+                              target = match.group(2)
+                              # Skip URLs, anchors, and mailto
+                              if target.startswith(('http://', 'https://', '#', 'mailto:')):
+                                  continue
+                              # Skip GitHub relative URLs (../../actions/...)
+                              if target.startswith('../../'):
+                                  continue
+                              # Strip anchor from path
+                              target = target.split('#')[0]
+                              if not target:
+                                  continue
+                              # Resolve relative to the markdown file's directory
+                              resolved = os.path.normpath(os.path.join(os.path.dirname(fpath), target))
+                              if not os.path.exists(resolved):
+                                  broken.append(f"  {fpath}:{lineno} -> {target}")
+
+          if broken:
+              print(f"Found {len(broken)} broken link(s):")
+              for b in broken:
+                  print(b)
+              sys.exit(1)
+          else:
+              print("All markdown links OK")
+          PYEOF
