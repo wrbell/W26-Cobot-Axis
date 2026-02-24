@@ -2,6 +2,10 @@ name: CI
 
 on: [push, pull_request, workflow_call]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -14,6 +18,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Install dependencies
         run: pip install ruff pytest pytest-cov ur_rtde
@@ -27,6 +32,27 @@ jobs:
             --cov=src/bridge \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml
+
+      - name: Job summary
+        if: matrix.python-version == '3.11' && always()
+        run: |
+          # Extract coverage % and test count from pytest output
+          {
+            echo "### Test Results (Python ${{ matrix.python-version }})"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            if [ -f coverage.xml ]; then
+              cov=$(python3 -c "
+          import xml.etree.ElementTree as ET
+          tree = ET.parse('coverage.xml')
+          rate = float(tree.getroot().get('line-rate', 0))
+          print(f'{rate*100:.0f}%')
+          ")
+              echo "| Coverage | ${cov} |"
+            fi
+            echo "| Python | ${{ matrix.python-version }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload coverage artifact
         if: matrix.python-version == '3.11'
@@ -49,6 +75,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: pip install mypy ur_rtde
@@ -75,6 +102,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
         run: pip install ur_rtde pytest pytest-cov mypy ruff

@@ -54,8 +54,27 @@ jobs:
           read -r _ data bss _ <<< "$(arm-none-eabi-size klipper/out/klipper.elf | tail -1)"
           sram_used=$((data + bss))
           sram_kb=$((sram_used / 1024))
+          sram_pct=$((sram_used * 100 / 270336))
           echo ""
           echo "SRAM usage: ${sram_kb} KB / 264 KB (.data=${data}, .bss=${bss})"
+
+          # Job summary
+          {
+            echo "### Firmware Size"
+            echo ""
+            echo "| Section | Bytes |"
+            echo "|---------|-------|"
+            echo "| .data | ${data} |"
+            echo "| .bss | ${bss} |"
+            echo "| **SRAM total** | **${sram_kb} KB / 264 KB (${sram_pct}%)** |"
+            echo ""
+            if [ "$sram_used" -gt 204800 ]; then
+              echo "> **FAIL:** exceeds 200 KB budget"
+            else
+              echo "> **PASS:** within 200 KB budget"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
           # Fail if SRAM usage exceeds 200 KB budget
           if [ "$sram_used" -gt 204800 ]; then
             echo "FAIL: SRAM usage ${sram_kb} KB exceeds 200 KB budget"
