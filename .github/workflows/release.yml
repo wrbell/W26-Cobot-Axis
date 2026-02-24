@@ -9,51 +9,7 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   firmware:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install ARM cross-compiler
-        run: sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
-
-      - name: Clone Klipper
-        run: git clone --depth 1 https://github.com/Klipper3d/klipper.git
-
-      - name: Apply StallGuard overlay
-        run: |
-          cp src/klipper_mods/stallguard_shared.h klipper/src/rp2040/
-          cp src/klipper_mods/core1_stallguard.c klipper/src/rp2040/
-          cp src/klipper_mods/stallguard_command.c klipper/src/rp2040/
-          sed -i '/rp2040\/i2c\.c/a src-y += rp2040/core1_stallguard.c\nsrc-y += rp2040/stallguard_command.c' klipper/src/rp2040/Makefile
-          sed -i '/#include "sched.h"/a /* W26: Core1 StallGuard DIAG pin monitor */\nextern void core1_launch(void);' klipper/src/rp2040/main.c
-          sed -i '/sched_main();/i \    core1_launch();' klipper/src/rp2040/main.c
-
-      - name: Write Klipper .config
-        run: |
-          sed 's/^ *//' > klipper/.config << 'EOF'
-          CONFIG_LOW_LEVEL_OPTIONS=y
-          CONFIG_MACH_RPXXXX=y
-          CONFIG_MACH_RP2040=y
-          CONFIG_RPXXXX_FLASH_START_0100=y
-          CONFIG_RP2040_FLASH_W25Q080=y
-          CONFIG_RPXXXX_USB=y
-          EOF
-
-      - name: Build firmware
-        run: cd klipper && make olddefconfig && make -j$(nproc)
-
-      - name: Firmware size check
-        run: |
-          arm-none-eabi-size klipper/out/klipper.elf
-          read -r _ data bss _ <<< "$(arm-none-eabi-size klipper/out/klipper.elf | tail -1)"
-          sram_used=$((data + bss))
-          echo "SRAM usage: $((sram_used / 1024)) KB / 264 KB"
-          [ "$sram_used" -le 204800 ] || { echo "FAIL: exceeds 200 KB"; exit 1; }
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-firmware
-          path: klipper/out/klipper.uf2
+    uses: ./.github/workflows/firmware.yml
 
   release:
     needs: [ci, firmware]
@@ -76,7 +32,7 @@ jobs:
       - name: Download firmware artifact
         uses: actions/download-artifact@v4
         with:
-          name: release-firmware
+          name: klipper-firmware
           path: firmware
 
       - name: Install pandoc and weasyprint

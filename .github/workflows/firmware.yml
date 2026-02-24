@@ -4,6 +4,7 @@ on:
   push:
     paths: ['src/klipper_mods/**']
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:
