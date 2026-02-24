@@ -158,6 +158,7 @@ Rough drafts in `docs/phase2/` — content ready to paste into Word and redraw i
 | SKR Pico + Klipper setup | `docs/skr_pico_klipper_setup.md` |
 | UR RTDE protocol & latency | `docs/ur_rtde.md` |
 | Power requirements | `docs/pi_power.md` |
+| Developer environment setup | `DEVELOPMENT.md` |
 
 ## Stretch Goals
 

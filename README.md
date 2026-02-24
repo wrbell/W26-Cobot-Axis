@@ -281,6 +281,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 ├── .gitignore                     # Ignores vendor/, __pycache__, .DS_Store, etc.
 ├── deploy.sh                      # 11-step idempotent deployment script (+ StallGuard overlay)
 ├── SETUP.md                       # Fresh Pi setup guide
+├── DEVELOPMENT.md                 # Developer & test environment setup (no hardware)
 └── requirements.txt               # Python dependencies (ur-rtde, pytest, ruff)
 ```
 
@@ -323,6 +324,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | [`trades/lingua_franca_vs_klipper.md`](trades/lingua_franca_vs_klipper.md) | Trade study: Klipper (4.70) vs Lingua Franca (1.95) |
 | [`trades/comms.md`](trades/comms.md) | Trade study: RTDE vs alternative protocols |
 | [`trades/mcu.md`](trades/mcu.md) | Trade study: SKR Pico vs alternatives |
+
+### Setup and Development
+
+| Document | Description |
+|----------|-------------|
+| [`SETUP.md`](SETUP.md) | Fresh Raspberry Pi setup (OS through verified operation) |
+| [`DEVELOPMENT.md`](DEVELOPMENT.md) | Local dev/test environment setup (no hardware needed) |
+| [`docs/ursim_quickstart.md`](docs/ursim_quickstart.md) | URSim quick-start for RTDE integration testing |
+| [`docs/design/ci_cd_guide.md`](docs/design/ci_cd_guide.md) | GitHub Actions CI/CD (Tiers 1--3) |
 
 ### Phase 2 Memo Drafts
 

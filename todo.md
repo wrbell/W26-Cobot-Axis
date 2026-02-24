@@ -224,6 +224,7 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] `deploy.sh` — 11-step deployment script (deps, configs, firmware, verification) + StallGuard overlay (Step 6b)
 - [x] `scripts/dev-sync.sh` — Fast rsync to Pi for iterative development (<5s)
 - [x] `SETUP.md` — step-by-step setup instructions for fresh Pi
+- [x] `DEVELOPMENT.md` — developer & test environment setup (no hardware needed)
 
 ### HITL Test Plan — Written
 - [x] `docs/design/hitl_plan.md` — TP-06 StallGuard test procedures, URSim dev bench topology, deploy workflow
