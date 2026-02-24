@@ -261,6 +261,14 @@ All software in `src/`. Can be developed and tested without physical hardware.
   - `curl http://localhost:7125/printer/objects/query?stallguard_monitor`
 - [ ] **Store Pi SSH credentials** as GitHub Actions secrets (`PI_HOST`, `PI_SSH_KEY`)
 
+#### Tier 4: Quality Gates (nice-to-have, impressive for capstone)
+- [ ] **Test coverage report** — add `pytest --cov=src/bridge --cov-report=xml` to CI, upload to Codecov or as artifact, add badge to README
+- [ ] **YAML/config linting** — `yamllint` on `.github/workflows/*.yml`, `src/klipper/*.cfg`; catches indent bugs like the heredoc issue before push
+- [ ] **Dependency security scan** — `pip-audit` in CI to flag known CVEs in ur-rtde, pytest, ruff
+- [ ] **Firmware size check** — `arm-none-eabi-size klipper.elf` in firmware workflow, fail if `.bss + .data` exceeds 200 KB (SRAM budget gate)
+- [ ] **Documentation link checker** — verify all `[text](path)` links in markdown files resolve (prevents broken cross-references)
+- [ ] **Release workflow** — on `v*` tag: run full CI + firmware build, create GitHub Release with `klipper.uf2` attached, generate changelog from commits
+
 #### Stretch: Batch StallGuard Data Reporting (instead of live)
 Investigate changing StallGuard measurement reporting from live 20 Hz polling to batch mode — buffer measurements on-device and send them back periodically.
 
