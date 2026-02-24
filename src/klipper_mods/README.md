@@ -1,7 +1,7 @@
 # W26 Klipper Modifications — Core1 StallGuard Monitor
 
-Firmware overlay for the SKR Pico (RP2040) that uses the idle second
-core to monitor the TMC2209 DIAG pin for real-time stall detection.
+Firmware overlay for the SKR Pico (RP2040) that uses the idle second core
+to monitor the TMC2209 DIAG pin for real-time stall detection.
 
 ## Why
 
