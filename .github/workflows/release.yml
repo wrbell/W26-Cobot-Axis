@@ -79,17 +79,20 @@ jobs:
           name: release-firmware
           path: firmware
 
-      - name: Install pandoc and wkhtmltopdf
-        run: sudo apt-get install -y pandoc wkhtmltopdf
+      - name: Install pandoc and weasyprint
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc
+          pip install weasyprint
 
       - name: Generate PDF docs
         run: |
           mkdir -p release-docs
           pandoc README.md -o release-docs/README.pdf \
-            --pdf-engine=wkhtmltopdf \
+            --pdf-engine=weasyprint \
             --metadata title="W26 Cobot Axis"
           pandoc docs/design_specification.md -o release-docs/design-specification.pdf \
-            --pdf-engine=wkhtmltopdf \
+            --pdf-engine=weasyprint \
             --metadata title="W26 Design Specification"
 
       - name: Generate changelog
