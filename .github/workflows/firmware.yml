@@ -69,9 +69,13 @@ jobs:
       - name: Symbol verification
         run: |
           echo "=== Verifying W26 overlay symbols ==="
+          # Klipper builds with LTO, which may:
+          #   - demote global symbols to local (T -> t)
+          #   - inline/rename functions (e.g. core1_launch -> core1_stallguard_main.lto_priv.0)
+          # So we grep for the root name in any text symbol [tTwW]
           missing=0
-          for sym in core1_launch command_stallguard_query command_stallguard_clear; do
-            if arm-none-eabi-nm klipper/out/klipper.elf | grep -q " T ${sym}$"; then
+          for sym in core1_stallguard_main command_stallguard_query command_stallguard_clear; do
+            if arm-none-eabi-nm klipper/out/klipper.elf | grep -qi " [tTwW] .*${sym}"; then
               echo "  OK: ${sym}"
             else
               echo "  MISSING: ${sym}"
