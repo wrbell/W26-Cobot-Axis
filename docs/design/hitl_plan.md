@@ -3,7 +3,7 @@
 **W26 Cobot Axis -- ME472 Mechatronics Capstone**
 **Author:** Willem (Software/EE)
 **Date:** 2026-02-24
-**Status:** Pre-hardware (all software mock-tested, 469 tests passing, 100% coverage)
+**Status:** Pre-hardware (all software mock-tested, 479 tests passing, 100% coverage)
 
 ---
 
@@ -24,7 +24,7 @@
 
 ### Purpose
 
-All bridge daemon, Klipper status, and RTDE client software has been written and tested against mocks (469 tests passing, 100% coverage, clean ruff lint). This document bridges the gap between mock-tested software and real hardware by:
+All bridge daemon, Klipper status, and RTDE client software has been written and tested against mocks (479 tests passing, 100% coverage, clean ruff lint). This document bridges the gap between mock-tested software and real hardware by:
 
 1. Extending the existing 8-stage integration plan (`docs/design/integration_plan.md`) with StallGuard firmware overlay steps at each relevant stage.
 2. Adding a formal test procedure (TP-06) for StallGuard validation, following the format of TP-01 through TP-05 in `docs/design/test_procedures.md`.

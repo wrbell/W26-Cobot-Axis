@@ -80,7 +80,8 @@ class Bridge:
                  enable_dashboard: bool = False,
                  dashboard_auto_start: bool = False,
                  ur_program: str = config.UR_PROGRAM_PATH,
-                 enable_sg_accumulator: bool = True):
+                 enable_sg_accumulator: bool = True,
+                 status_poll_interval: float = config.STATUS_POLL_INTERVAL):
         self.rtde = RTDEClient(host=ur_host)
         self.klipper = KlipperClient(config.KLIPPY_SOCKET)
         self.state = BridgeState()
@@ -94,13 +95,15 @@ class Bridge:
             enabled=enable_watchdog,
         )
 
-        # --- Enhancement 2: Klipper status polling ---
+        # --- Enhancement 2: Klipper status polling (dedicated socket) ---
         self._enable_status_poll = enable_status_poll
+        self._status_klipper: KlipperClient | None = None
         self.status_poller: KlipperStatusPoller | None = None
         if enable_status_poll:
+            self._status_klipper = KlipperClient(config.KLIPPY_SOCKET)
             self.status_poller = KlipperStatusPoller(
-                klipper_client=self.klipper,
-                poll_interval=config.STATUS_POLL_INTERVAL,
+                klipper_client=self._status_klipper,
+                poll_interval=status_poll_interval,
             )
 
         # --- Enhancement 3: Data logging ---
@@ -125,7 +128,9 @@ class Bridge:
         # --- Enhancement 7: StallGuard accumulator ---
         self.sg_accumulator: StallGuardAccumulator | None = None
         if enable_sg_accumulator and enable_status_poll:
-            self.sg_accumulator = StallGuardAccumulator()
+            self.sg_accumulator = StallGuardAccumulator(
+                sample_rate_hz=1.0 / status_poll_interval,
+            )
             if self.status_poller:
                 self.status_poller.set_accumulator(self.sg_accumulator)
 
@@ -225,6 +230,8 @@ class Bridge:
 
         self.rtde.disconnect()
         self.klipper.disconnect()
+        if self._status_klipper:
+            self._status_klipper.disconnect()
         log.info("Bridge stopped.")
 
     # ------------------------------------------------------------------
@@ -243,7 +250,7 @@ class Bridge:
                             exc, config.RECONNECT_DELAY)
                 time.sleep(config.RECONNECT_DELAY)
 
-        # Connect Klipper
+        # Connect Klipper (main socket — gcode commands)
         while self._running:
             try:
                 self.klipper.connect()
@@ -255,6 +262,18 @@ class Bridge:
                 log.warning("Klipper connection failed: %s — retrying in %.0fs",
                             exc, config.RECONNECT_DELAY)
                 time.sleep(config.RECONNECT_DELAY)
+
+        # Connect Klipper status socket (dedicated for polling)
+        if self._status_klipper:
+            while self._running:
+                try:
+                    self._status_klipper.connect()
+                    log.info("Status socket connected")
+                    break
+                except Exception as exc:
+                    log.warning("Status socket connection failed: %s — retrying in %.0fs",
+                                exc, config.RECONNECT_DELAY)
+                    time.sleep(config.RECONNECT_DELAY)
 
         # Connect Dashboard Server (optional, non-blocking)
         if self.dashboard:
@@ -691,6 +710,9 @@ def main():
     # Enhancement 2: Klipper status polling
     parser.add_argument("--no-status-poll", action="store_true",
                         help="Disable Klipper TMC2209 status polling")
+    parser.add_argument("--status-interval", type=float,
+                        default=config.STATUS_POLL_INTERVAL,
+                        help=f"Status poll interval in seconds (default: {config.STATUS_POLL_INTERVAL})")
 
     # Enhancement 3: Data logging
     parser.add_argument("--log", action="store_true", dest="enable_log",
@@ -762,6 +784,7 @@ def main():
         dashboard_auto_start=args.dashboard_auto,
         ur_program=args.ur_program,
         enable_sg_accumulator=not args.no_sg_accumulator,
+        status_poll_interval=args.status_interval,
     )
 
     # Graceful shutdown on SIGTERM

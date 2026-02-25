@@ -66,7 +66,7 @@ pip install -r requirements.txt
 python -m pytest src/bridge/tests/ -v
 ```
 
-Expected output: **469 passed** in under 2 seconds.
+Expected output: **479 passed** in under 2 seconds.
 
 **Single test file:**
 
@@ -221,7 +221,7 @@ except ImportError:
 ```
 
 **What this means:**
-- All 469 tests pass without any hardware or `ur-rtde` installed
+- All 479 tests pass without any hardware or `ur-rtde` installed
 - The bridge daemon starts but won't connect to a real robot
 - Mock objects in `conftest.py` simulate both RTDE and Klipper socket responses
 - You can develop, test, and lint entirely on your laptop
@@ -348,7 +348,7 @@ See the script header in [`scripts/dev-sync.sh`](scripts/dev-sync.sh) for option
 | Command | What it does |
 |---------|-------------|
 | `make check` | Run all checks (lint + test + typecheck + yamllint + spellcheck) |
-| `make test` | Run all 469 tests with coverage |
+| `make test` | Run all 479 tests with coverage |
 | `make lint` | Ruff lint check |
 | `make fmt` | Ruff auto-fix |
 | `make typecheck` | mypy type check |
@@ -356,7 +356,7 @@ See the script header in [`scripts/dev-sync.sh`](scripts/dev-sync.sh) for option
 | `make clean` | Remove caches and build artifacts |
 | `make ci-local` | Run CI locally via `act` (requires Docker) |
 | `pre-commit run --all-files` | Run all pre-commit hooks manually |
-| `python -m pytest src/bridge/tests/ -v` | Run all 469 tests (verbose) |
+| `python -m pytest src/bridge/tests/ -v` | Run all 479 tests (verbose) |
 | `python -m pytest src/bridge/tests/test_bridge_daemon.py -v` | Run one test file |
 | `python -m pytest src/bridge/tests/test_bridge_daemon.py::test_idle_mode -v` | Run one test |
 | `python -m bridge` | Start bridge daemon (needs RTDE + Klipper) |

@@ -112,7 +112,7 @@ WATCHDOG_ENABLED = True
 # ---------------------------------------------------------------------------
 # Klipper status polling (Enhancement 2 — P2)
 # ---------------------------------------------------------------------------
-STATUS_POLL_INTERVAL = 0.25          # seconds between Klipper status queries
+STATUS_POLL_INTERVAL = 0.05           # seconds between Klipper status queries (20 Hz)
 STATUS_POLL_OBJECTS = {
     "tmc2209 manual_stepper pump": None,   # full drv_status
     "stepper_enable": None,                # enabled steppers
@@ -160,4 +160,4 @@ DASHBOARD_AUTO_START = False         # automatically load + play UR program on b
 # StallGuard accumulator (Enhancement 7 — P7)
 # ---------------------------------------------------------------------------
 SG_ACCUMULATOR_DURATION_S = 300.0       # 5 minutes of history
-SG_ACCUMULATOR_SAMPLE_RATE_HZ = 4.0    # matches STATUS_POLL_INTERVAL
+SG_ACCUMULATOR_SAMPLE_RATE_HZ = 20.0   # matches STATUS_POLL_INTERVAL (1/0.05)

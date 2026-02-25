@@ -563,10 +563,11 @@ class TestShutdown:
         )
 
     def test_stop_disconnects_both_clients(self, bridge):
-        """stop() disconnects both RTDE and Klipper."""
+        """stop() disconnects RTDE, Klipper, and status socket."""
         bridge.stop()
         bridge.rtde.disconnect.assert_called_once()
         bridge.klipper.disconnect.assert_called_once()
+        bridge._status_klipper.disconnect.assert_called_once()
 
     def test_stop_sets_running_false(self, bridge):
         """stop() sets _running to False."""
@@ -826,6 +827,39 @@ class TestBridgeConstructor:
         b = Bridge(ur_host="127.0.0.1")
         assert b.dashboard is None
 
+    def test_constructor_creates_status_klipper_when_poll_enabled(self):
+        """_status_klipper is a separate KlipperClient when status_poll is enabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True)
+        assert b._status_klipper is not None
+        assert isinstance(b._status_klipper, KlipperClient)
+        assert b._status_klipper is not b.klipper
+
+    def test_constructor_no_status_klipper_when_poll_disabled(self):
+        """_status_klipper is None when status_poll is disabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=False)
+        assert b._status_klipper is None
+
+    def test_constructor_poller_uses_status_klipper(self):
+        """KlipperStatusPoller uses the dedicated _status_klipper, not main klipper."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True)
+        assert b.status_poller is not None
+        assert b.status_poller._klipper is b._status_klipper
+
+    def test_constructor_custom_status_poll_interval(self):
+        """Custom status_poll_interval is passed through to the poller."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True,
+                   status_poll_interval=0.1)
+        assert b.status_poller is not None
+        assert b.status_poller._poll_interval == 0.1
+
+    def test_constructor_sg_accumulator_uses_poll_interval_rate(self):
+        """SG accumulator sample_rate_hz derived from status_poll_interval."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True,
+                   status_poll_interval=0.1)
+        assert b.sg_accumulator is not None
+        # 1/0.1 = 10 Hz, 300s * 10 = 3000 capacity
+        assert b.sg_accumulator.capacity == int(config.SG_ACCUMULATOR_DURATION_S * 10.0)
+
 
 # ===================================================================
 # _connect_all() retry loops
@@ -876,6 +910,7 @@ class TestConnectAll:
         b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
         b.rtde = MagicMock(spec=RTDEClient)
         b.klipper = MagicMock(spec=KlipperClient)
+        b._status_klipper = MagicMock(spec=KlipperClient)
         b.dashboard = MagicMock(spec=DashboardClient)
         b.dashboard.connected = True
         b._running = True
@@ -891,6 +926,7 @@ class TestConnectAll:
         b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
         b.rtde = MagicMock(spec=RTDEClient)
         b.klipper = MagicMock(spec=KlipperClient)
+        b._status_klipper = MagicMock(spec=KlipperClient)
         b.dashboard = MagicMock(spec=DashboardClient)
         b.dashboard.connect.side_effect = ConnectionError("refused")
         b._running = True
@@ -911,6 +947,52 @@ class TestConnectAll:
 
         # Should not have retried since _running is False
         bridge.rtde.connect.assert_not_called()
+
+    def test_connect_all_connects_status_klipper(self, bridge):
+        """_connect_all connects the dedicated status socket."""
+        bridge._running = True
+        bridge.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            bridge._connect_all()
+
+        bridge._status_klipper.connect.assert_called_once()
+
+    def test_connect_all_retries_status_klipper(self):
+        """_connect_all retries status socket connection on failure."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b._status_klipper = MagicMock(spec=KlipperClient)
+        b._running = True
+        b.klipper.get_info.return_value = {"state_message": "ready"}
+        attempt = [0]
+
+        def connect_side_effect():
+            attempt[0] += 1
+            if attempt[0] < 2:
+                raise ConnectionError("socket not found")
+
+        b._status_klipper.connect.side_effect = connect_side_effect
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            b._connect_all()
+
+        assert b._status_klipper.connect.call_count == 2
+
+    def test_connect_all_skips_status_klipper_when_disabled(self):
+        """_connect_all skips status socket when status_poll is disabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=False)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b._running = True
+        b.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            b._connect_all()
+
+        # _status_klipper is None, so no connect attempted
+        assert b._status_klipper is None
 
 
 # ===================================================================
@@ -1848,6 +1930,32 @@ class TestMainCLI:
                             if c[0][0] == sig.SIGTERM]
             assert len(signal_calls) == 1
 
+    def test_main_status_interval(self):
+        """main() --status-interval passes status_poll_interval to Bridge."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--status-interval", "0.1"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["status_poll_interval"] == 0.1
+
+    def test_main_default_status_interval(self):
+        """main() default --status-interval matches config constant."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["status_poll_interval"] == config.STATUS_POLL_INTERVAL
+
 
 # ===================================================================
 # _connect_all with dashboard auto-start
@@ -1861,6 +1969,7 @@ class TestConnectAllDashboardAutoStart:
                    dashboard_auto_start=True)
         b.rtde = MagicMock(spec=RTDEClient)
         b.klipper = MagicMock(spec=KlipperClient)
+        b._status_klipper = MagicMock(spec=KlipperClient)
         b.dashboard = MagicMock(spec=DashboardClient)
         b.dashboard.connected = True
         b._running = True

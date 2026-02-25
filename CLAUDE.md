@@ -38,7 +38,7 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 ## Repository Structure
 
 - `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
-- `src/bridge/tests/` — pytest suite (469 tests across 10 files, 100% coverage)
+- `src/bridge/tests/` — pytest suite (479 tests across 10 files, 100% coverage)
 - `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
 - `src/klipper_mods/` — StallGuard dual-core firmware overlay (C firmware, klippy extras, patches)
 - `src/urscript/` — URScript programs for UR30 teach pendant
@@ -71,7 +71,7 @@ pip install -r requirements.txt         # ur-rtde, pytest, ruff
 
 **Running tests and lint:**
 ```bash
-python -m pytest src/bridge/tests/ -v   # ~469 tests, ~1.5s
+python -m pytest src/bridge/tests/ -v   # ~479 tests, ~1.5s
 ruff check src/bridge/                  # lint
 ```
 

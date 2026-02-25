@@ -62,7 +62,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 |------|--------|
 | **Phase 1: Ideation** | Complete |
 | **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
-| **Software development** | All source code written and unit tested (469 tests across 10 files, 100% coverage, clean lint). 7 bridge enhancements + StallGuard firmware. Waiting on hardware for integration. |
+| **Software development** | All source code written and unit tested (479 tests across 10 files, 100% coverage, clean lint). 7 bridge enhancements + StallGuard firmware. Waiting on hardware for integration. |
 | **CI/CD** | Tier 1 (lint + test + coverage + mypy + shellcheck, Python 3.9/3.11 matrix), Tier 2 (firmware cross-compile + SRAM size check), quality gates (yamllint, pip-audit, codespell, link checker, deploy-check), release workflow, patch freshness (weekly cron), and Dependabot. |
 | **StallGuard firmware** | Written — RP2040 core1 DIAG pin monitor (C firmware + klippy extras + patches). Verified against real Klipper source tree. All audit issues resolved. |
 | **Deploy tooling** | Written — `deploy.sh` (11-step + StallGuard overlay, cross-platform sed), `scripts/dev-sync.sh` (fast rsync for iterative dev) |
@@ -92,7 +92,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 **Source Code (all in `src/`):**
 - Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
 - Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client, StallGuard accumulator
-- Unit tests: 469 tests across 10 test files, 100% coverage, all passing, clean ruff lint
+- Unit tests: 479 tests across 10 test files, 100% coverage, all passing, clean ruff lint
 - Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209, stallguard_monitor), `moonraker.conf`, `mainsail.cfg` (pump macros)
 - URScript: extrusion control library, system validation test (10 sub-tests), pump calibration test (5 sub-tests)
 - Deployment: `requirements.txt` (runtime + dev deps), systemd service (portable `%h` paths), 11-step deploy script (with StallGuard overlay, cross-platform sed), full setup guide, dev-sync script
@@ -199,7 +199,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   │   ├── dashboard_client.py    # UR30 Dashboard Server (port 29999)
 │   │   ├── stallguard_accumulator.py # Pi-side StallGuard history buffer
 │   │   ├── profiles.json          # Pre-defined extrusion profiles
-│   │   └── tests/                 # pytest suite (469 tests, 100% coverage)
+│   │   └── tests/                 # pytest suite (479 tests, 100% coverage)
 │   │       ├── conftest.py              # Shared fixtures (FakeKlippy, mock sockets)
 │   │       ├── test_bridge_daemon.py    # 146 tests
 │   │       ├── test_dashboard_client.py # 38 tests

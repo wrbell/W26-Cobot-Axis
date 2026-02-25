@@ -143,6 +143,8 @@ def bridge():
     b = Bridge(ur_host="127.0.0.1", dry_run=False)
     b.rtde = MagicMock(spec=RTDEClient)
     b.klipper = MagicMock(spec=KlipperClient)
+    if b._status_klipper is not None:
+        b._status_klipper = MagicMock(spec=KlipperClient)
     b.rtde.connected = True
     b.klipper.connected = True
     b.state.ready = True
@@ -155,6 +157,8 @@ def dry_run_bridge():
     b = Bridge(ur_host="127.0.0.1", dry_run=True)
     b.rtde = MagicMock(spec=RTDEClient)
     b.klipper = MagicMock(spec=KlipperClient)
+    if b._status_klipper is not None:
+        b._status_klipper = MagicMock(spec=KlipperClient)
     b.rtde.connected = True
     b.klipper.connected = True
     b.state.ready = True

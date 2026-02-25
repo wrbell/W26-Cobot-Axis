@@ -165,7 +165,7 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] **Dashboard Server client** — UR30 port 29999 lifecycle management (`dashboard_client.py`)
 - [x] **StallGuard accumulator** — Pi-side 5-minute history buffer for batch data reporting (`stallguard_accumulator.py`)
 
-#### Testing — 469 tests across 10 files (100% coverage)
+#### Testing — 479 tests across 10 files (100% coverage)
 - [x] **Unit tests for `klipper_client.py`** — 44 tests, mock Unix socket, JSON protocol, error handling
 - [x] **Unit tests for `rtde_client.py`** — 44 tests, stub mode, register read/write, import fallback
 - [x] **Unit tests for `bridge_daemon.py`** — 146 tests, command translation, e-stop, mode switching, reconnection, subsystems, CLI
