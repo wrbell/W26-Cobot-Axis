@@ -58,7 +58,7 @@ jobs:
 
       - name: Test report
         if: matrix.python-version == '3.11' && always()
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         with:
           report_paths: test-results.xml
           include_passed: false
