@@ -1,6 +1,7 @@
 ![CI](../../actions/workflows/ci.yml/badge.svg)
 ![Firmware Build](../../actions/workflows/firmware.yml/badge.svg)
 ![Patch Freshness](../../actions/workflows/patch-freshness.yml/badge.svg)
+[![codecov](https://codecov.io/gh/wrbell/W26-Cobot-Axis/graph/badge.svg)](https://codecov.io/gh/wrbell/W26-Cobot-Axis)
 
 # W26 Cobot Axis — UR30 7th Axis for Metal Paste Dispensing
 

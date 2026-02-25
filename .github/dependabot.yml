@@ -6,6 +6,8 @@ updates:
       interval: weekly
     commit-message:
       prefix: "deps"
+    labels:
+      - "dependencies"
 
   - package-ecosystem: github-actions
     directory: /
@@ -13,3 +15,5 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+    labels:
+      - "dependencies"
