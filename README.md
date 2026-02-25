@@ -62,7 +62,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 |------|--------|
 | **Phase 1: Ideation** | Complete |
 | **Phase 2: Design** | In progress — analysis, trade studies, software design, and memo rough drafts complete. Needs redrawing in draw.io/KiCad, Dawood's sections, and final Word compilation. Due Mar 1. |
-| **Software development** | All source code written and unit tested (335 tests across 10 files, clean lint). 7 bridge enhancements + StallGuard firmware. Waiting on hardware for integration. |
+| **Software development** | All source code written and unit tested (469 tests across 10 files, 100% coverage, clean lint). 7 bridge enhancements + StallGuard firmware. Waiting on hardware for integration. |
 | **CI/CD** | Tier 1 (lint + test + coverage + mypy + shellcheck, Python 3.9/3.11 matrix), Tier 2 (firmware cross-compile + SRAM size check), quality gates (yamllint, pip-audit, codespell, link checker, deploy-check), release workflow, patch freshness (weekly cron), and Dependabot. |
 | **StallGuard firmware** | Written — RP2040 core1 DIAG pin monitor (C firmware + klippy extras + patches). Verified against real Klipper source tree. All audit issues resolved. |
 | **Deploy tooling** | Written — `deploy.sh` (11-step + StallGuard overlay, cross-platform sed), `scripts/dev-sync.sh` (fast rsync for iterative dev) |
@@ -77,7 +77,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 - Problem analysis, latency analysis, RTDE register allocation — all complete
 - 3 trade studies with weighted scoring: Klipper (4.70), RTDE (4.85), SKR Pico (selected)
 - Formal design specification — 25 "shall" statements, interface tables, performance targets
-- 13+ design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, HITL testing, and stepper driving
+- 14 design documents covering all software subsystems, deployment, integration plan, test procedures, network architecture, HITL testing, and stepper driving
 - Stepper driving design — consolidated justification for `[manual_stepper]`, TMC2209 config, step generation pipeline
 
 **Phase 2 Memo Rough Drafts (all in `docs/phase2/`):**
@@ -92,7 +92,7 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 **Source Code (all in `src/`):**
 - Bridge daemon core: config, RTDE client, Klipper client, main loop with mode switching, e-stop, reconnection
 - Bridge enhancements: watchdog timer, TMC2209 status polling, CSV data logging, speed-proportional extrusion, configurable profiles, UR Dashboard client, StallGuard accumulator
-- Unit tests: 335 tests across 10 test files, all passing, clean ruff lint
+- Unit tests: 469 tests across 10 test files, 100% coverage, all passing, clean ruff lint
 - Klipper configs: `printer.cfg` (SKR Pico, manual_stepper, TMC2209, stallguard_monitor), `moonraker.conf`, `mainsail.cfg` (pump macros)
 - URScript: extrusion control library, system validation test (10 sub-tests), pump calibration test (5 sub-tests)
 - Deployment: `requirements.txt` (runtime + dev deps), systemd service (portable `%h` paths), 11-step deploy script (with StallGuard overlay, cross-platform sed), full setup guide, dev-sync script
@@ -173,7 +173,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 | 3 | Specification | **Mostly complete** — formal spec with 25 requirements (`docs/design_specification.md`). Pin table and power budget drafted (`docs/phase2/`). |
 | 4 | Possible Solutions | **Mostly complete** — 3 trade studies done. Location study pending (Dawood). |
 | 5 | Solution Selection | **Complete** — Klipper, RTDE, SKR Pico selected and documented |
-| 6 | Detailed Design | **In progress** — software design complete (13 docs). Circuit schematic, block diagram, BOM, power budget, pin table, buck converter all drafted. Circuit layout and mechanical drawings pending. |
+| 6 | Detailed Design | **In progress** — software design complete (14 docs). Circuit schematic, block diagram, BOM, power budget, pin table, buck converter all drafted. Circuit layout and mechanical drawings pending. |
 | 7 | Working Drawings | **Upcoming** — final schematics, mechanical drawings, wiring diagrams |
 
 ---
@@ -199,15 +199,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   │   ├── dashboard_client.py    # UR30 Dashboard Server (port 29999)
 │   │   ├── stallguard_accumulator.py # Pi-side StallGuard history buffer
 │   │   ├── profiles.json          # Pre-defined extrusion profiles
-│   │   └── tests/                 # pytest suite (335 tests)
+│   │   └── tests/                 # pytest suite (469 tests, 100% coverage)
 │   │       ├── conftest.py              # Shared fixtures (FakeKlippy, mock sockets)
-│   │       ├── test_bridge_daemon.py    # 71 tests
-│   │       ├── test_dashboard_client.py # 25 tests
-│   │       ├── test_data_logger.py      # 17 tests
-│   │       ├── test_extrusion_profile.py # 39 tests
-│   │       ├── test_klipper_client.py   # 42 tests
-│   │       ├── test_rtde_client.py      # 43 tests
-│   │       ├── test_stallguard.py       # 25 tests
+│   │       ├── test_bridge_daemon.py    # 146 tests
+│   │       ├── test_dashboard_client.py # 38 tests
+│   │       ├── test_data_logger.py      # 29 tests
+│   │       ├── test_extrusion_profile.py # 46 tests
+│   │       ├── test_klipper_client.py   # 44 tests
+│   │       ├── test_rtde_client.py      # 44 tests
+│   │       ├── test_stallguard.py       # 49 tests
 │   │       ├── test_config.py                # 24 tests
 │   │       ├── test_stallguard_accumulator.py # 34 tests
 │   │       └── test_watchdog.py         # 15 tests
@@ -254,7 +254,7 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │   │   ├── buck_converter.md      # Pololu D24V22F5 selection + part numbers
 │   │   ├── bom.md                 # 28-item BOM with DigiKey/Newark P/Ns (~$183)
 │   │   └── memo_draft.md          # Full memo text (~1,400 words) + all tables
-│   └── design/                    # Software design documents (13 docs)
+│   └── design/                    # Software design documents (14 docs)
 │       ├── stepper_driving.md     # How Klipper drives the stepper (consolidated)
 │       ├── bridge_enhancements.md # 6 bridge enhancement designs
 │       ├── klipper_config.md      # Moonraker/Mainsail config design
@@ -264,6 +264,8 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │       ├── network_architecture.md # IP, ports, firewall, DNS
 │       ├── integration_plan.md    # Phase 3 step-by-step plan
 │       ├── test_procedures.md     # Phase 4 test procedures
+│       ├── hitl_plan.md           # HITL test plan (StallGuard, URSim dev bench)
+│       ├── ci_cd_guide.md         # CI/CD setup guide (Tiers 1–3)
 │       ├── phase2_deliverables.md # Phase 2 memo planning
 │       ├── phase2_memo_outline.md # Memo structure and content
 │       └── final_report_outline.md # Final report structure
@@ -284,7 +286,9 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 │       ├── ci.yml                 # Tier 1: lint + test + coverage + mypy + shellcheck + quality gates (7 jobs, Python 3.9/3.11 matrix)
 │       ├── firmware.yml           # Tier 2: firmware build + SRAM size check on klipper_mods changes
 │       ├── patch-freshness.yml    # Weekly cron: verify StallGuard patches apply against upstream Klipper
-│       └── release.yml            # Release: on v* tag, full CI + firmware + GitHub Release with klipper.uf2
+│       ├── release.yml            # Release: on v* tag, full CI + firmware + GitHub Release with klipper.uf2
+│       ├── dependabot-auto-merge.yml  # Auto-merge passing Dependabot PRs
+│       └── pr-size.yml            # PR size labeler (XS/S/M/L/XL)
 ├── .yamllint                      # yamllint config (relaxed: allow long lines, truthy)
 ├── pyproject.toml                 # mypy config with per-module overrides
 ├── .gitignore                     # Ignores vendor/, __pycache__, .DS_Store, etc.
@@ -300,15 +304,15 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 
 | Component | Location | Tests |
 |-----------|----------|-------|
-| Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` | 71 tests |
+| Bridge daemon (main loop) | `src/bridge/bridge_daemon.py` | 146 tests |
 | Bridge config (registers, constants) | `src/bridge/config.py` | 24 tests |
-| Klipper Unix socket client | `src/bridge/klipper_client.py` | 42 tests |
-| RTDE client wrapper | `src/bridge/rtde_client.py` | 43 tests |
-| StallGuard status integration | `src/bridge/klipper_status.py` | 25 tests |
+| Klipper Unix socket client | `src/bridge/klipper_client.py` | 44 tests |
+| RTDE client wrapper | `src/bridge/rtde_client.py` | 44 tests |
+| StallGuard status integration | `src/bridge/klipper_status.py` | 49 tests |
 | Watchdog timer | `src/bridge/watchdog.py` | 15 tests |
-| Data logger | `src/bridge/data_logger.py` | 17 tests |
-| Extrusion profiles | `src/bridge/extrusion_profile.py` | 39 tests |
-| Dashboard client | `src/bridge/dashboard_client.py` | 25 tests |
+| Data logger | `src/bridge/data_logger.py` | 29 tests |
+| Extrusion profiles | `src/bridge/extrusion_profile.py` | 46 tests |
+| Dashboard client | `src/bridge/dashboard_client.py` | 38 tests |
 | StallGuard accumulator | `src/bridge/stallguard_accumulator.py` | 34 tests |
 | Klipper printer config | `src/klipper/printer.cfg` | — (config) |
 | Moonraker config | `src/klipper/moonraker.conf` | — (config) |

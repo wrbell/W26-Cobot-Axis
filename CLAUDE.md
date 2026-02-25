@@ -38,13 +38,13 @@ UR30 Robot Controller  ──RTDE/TCP-IP──▶  Pi (Klipper host + RTDE bridg
 ## Repository Structure
 
 - `src/bridge/` — Python RTDE-to-Klipper bridge daemon (config, RTDE client, Klipper client, main loop)
-- `src/bridge/tests/` — pytest suite (335 tests across 10 files)
+- `src/bridge/tests/` — pytest suite (469 tests across 10 files, 100% coverage)
 - `src/klipper/` — Klipper configuration (`printer.cfg` for SKR Pico)
 - `src/klipper_mods/` — StallGuard dual-core firmware overlay (C firmware, klippy extras, patches)
 - `src/urscript/` — URScript programs for UR30 teach pendant
 - `trades/` — Trade studies (comms protocol, MCU platform, Klipper vs Lingua Franca)
 - `docs/` — Engineering analysis and technical reference (latency, register allocation, hardware specs)
-- `docs/design/` — Software design documents (13+ docs: stepper driving, bridge enhancements, integration plan, HITL plan, etc.)
+- `docs/design/` — Software design documents (14 docs: stepper driving, bridge enhancements, integration plan, HITL plan, CI/CD guide, etc.)
 - `docs/phase2/` — Phase 2 memo rough drafts (7 docs: block diagram, circuit schematic, pin table, power budget, buck converter, BOM, memo text)
 - `reqs/` — Course requirements, scope, process docs
 - `scripts/` — Deployment and development helper scripts (`dev-sync.sh`)
@@ -71,7 +71,7 @@ pip install -r requirements.txt         # ur-rtde, pytest, ruff
 
 **Running tests and lint:**
 ```bash
-python -m pytest src/bridge/tests/ -v   # ~335 tests, <1s
+python -m pytest src/bridge/tests/ -v   # ~469 tests, ~1.5s
 ruff check src/bridge/                  # lint
 ```
 
@@ -104,6 +104,11 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | Bridge config (registers, constants) | `src/bridge/config.py` |
 | Klipper Unix socket client | `src/bridge/klipper_client.py` |
 | RTDE client wrapper | `src/bridge/rtde_client.py` |
+| TMC2209 status polling | `src/bridge/klipper_status.py` |
+| Watchdog timer | `src/bridge/watchdog.py` |
+| CSV data logger | `src/bridge/data_logger.py` |
+| Extrusion profiles | `src/bridge/extrusion_profile.py` |
+| UR Dashboard client | `src/bridge/dashboard_client.py` |
 | StallGuard accumulator | `src/bridge/stallguard_accumulator.py` |
 | Klipper printer config | `src/klipper/printer.cfg` |
 | URScript extrusion program | `src/urscript/extrusion_control.script` |
@@ -117,6 +122,10 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | Dev sync script | `scripts/dev-sync.sh` |
 | CI workflow (Tier 1) | `.github/workflows/ci.yml` |
 | Firmware build workflow (Tier 2) | `.github/workflows/firmware.yml` |
+| Patch freshness (weekly cron) | `.github/workflows/patch-freshness.yml` |
+| Release workflow (v* tags) | `.github/workflows/release.yml` |
+| Dependabot auto-merge | `.github/workflows/dependabot-auto-merge.yml` |
+| PR size labeler | `.github/workflows/pr-size.yml` |
 
 ## Design Documents
 

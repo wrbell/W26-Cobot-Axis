@@ -165,15 +165,15 @@ All software in `src/`. Can be developed and tested without physical hardware.
 - [x] **Dashboard Server client** — UR30 port 29999 lifecycle management (`dashboard_client.py`)
 - [x] **StallGuard accumulator** — Pi-side 5-minute history buffer for batch data reporting (`stallguard_accumulator.py`)
 
-#### Testing — 335 tests across 10 files
-- [x] **Unit tests for `klipper_client.py`** — 42 tests, mock Unix socket, JSON protocol, error handling
-- [x] **Unit tests for `rtde_client.py`** — 43 tests, stub mode, register read/write
-- [x] **Unit tests for `bridge_daemon.py`** — 71 tests, command translation, e-stop, mode switching, reconnection
-- [x] **Unit tests for StallGuard** — 25 tests, bridge integration with stallguard status
+#### Testing — 469 tests across 10 files (100% coverage)
+- [x] **Unit tests for `klipper_client.py`** — 44 tests, mock Unix socket, JSON protocol, error handling
+- [x] **Unit tests for `rtde_client.py`** — 44 tests, stub mode, register read/write, import fallback
+- [x] **Unit tests for `bridge_daemon.py`** — 146 tests, command translation, e-stop, mode switching, reconnection, subsystems, CLI
+- [x] **Unit tests for StallGuard** — 49 tests, bridge integration with stallguard status, poll loop error handling
 - [x] **Unit tests for `watchdog.py`** — 15 tests, timeout detection, feed/reset, stale timestamp logic, disabled mode
-- [x] **Unit tests for `data_logger.py`** — 17 tests, CSV columns, file rotation, decimation, annotations, lifecycle
-- [x] **Unit tests for `extrusion_profile.py`** — 39 tests, linear/polynomial/lookup profiles, JSON loading, fallback, edge cases
-- [x] **Unit tests for `dashboard_client.py`** — 25 tests, TCP server mock, status queries, control commands, DashboardPoller
+- [x] **Unit tests for `data_logger.py`** — 29 tests, CSV columns, file rotation, decimation, annotations, lifecycle, error recovery
+- [x] **Unit tests for `extrusion_profile.py`** — 46 tests, linear/polynomial/lookup profiles, JSON loading, fallback, edge cases
+- [x] **Unit tests for `dashboard_client.py`** — 38 tests, TCP server mock, status queries, control commands, DashboardPoller, error handling
 - [x] **Unit tests for `stallguard_accumulator.py`** — 34 tests, NamedTuple, capacity, overflow, thread safety, stats, CSV dump, poller/bridge wiring
 - [x] **Config validation tests** — 24 tests: register name format, no duplicates, sane constants (`test_config.py`)
 - [ ] **URSim integration testing** — moved to Phase 3 "Pre-Hardware: URSim Validation" section
