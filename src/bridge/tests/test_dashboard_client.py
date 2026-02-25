@@ -54,7 +54,7 @@ class FakeDashboardServer:
                 resp = self.responses.get(cmd, self.default_response)
                 f.write(resp + "\n")
                 f.flush()
-        except (OSError, BrokenPipeError):
+        except (OSError, BrokenPipeError):  # pragma: no cover
             pass
 
     def stop(self):
@@ -227,8 +227,8 @@ class TestDashboardPoller:
         poller = DashboardPoller(dc, poll_interval=0.05)
         poller.start()
         # Give it time to poll
-        import time
-        time.sleep(0.15)
+        import time as time_mod
+        time_mod.sleep(0.15)
         poller.stop()
 
         assert poller.get_cached_robot_mode() == "RUNNING"
@@ -241,3 +241,132 @@ class TestDashboardPoller:
         poller.start()
         poller.start()  # should not create second thread
         poller.stop()
+
+
+# ---------------------------------------------------------------------------
+# Disconnect edge cases (OSError in close)
+# ---------------------------------------------------------------------------
+
+class TestDisconnectEdgeCases:
+    def test_disconnect_file_oserror(self):
+        """disconnect handles OSError from file.close()."""
+        c = DashboardClient("127.0.0.1")
+        c._file = MagicMock()
+        c._file.close.side_effect = OSError("broken pipe")
+        c._sock = MagicMock()
+
+        c.disconnect()
+
+        assert c._file is None
+        assert c._sock is None
+
+    def test_disconnect_sock_oserror(self):
+        """disconnect handles OSError from sock.close()."""
+        c = DashboardClient("127.0.0.1")
+        c._file = None
+        c._sock = MagicMock()
+        c._sock.close.side_effect = OSError("broken")
+
+        c.disconnect()
+
+        assert c._sock is None
+
+
+# ---------------------------------------------------------------------------
+# send_command OSError
+# ---------------------------------------------------------------------------
+
+class TestSendCommandError:
+    def test_send_command_oserror_raises_connection_error(self):
+        """send_command raises ConnectionError on OSError."""
+        c = DashboardClient("127.0.0.1")
+        c._sock = MagicMock()
+        c._file = MagicMock()
+        c._file.write.side_effect = OSError("broken pipe")
+
+        with pytest.raises(ConnectionError, match="failed"):
+            c.send_command("robotmode")
+
+    def test_send_command_socket_timeout_raises(self):
+        """send_command raises ConnectionError on socket.timeout."""
+        c = DashboardClient("127.0.0.1")
+        c._sock = MagicMock()
+        c._file = MagicMock()
+        c._file.write.side_effect = socket.timeout("timed out")
+
+        with pytest.raises(ConnectionError, match="failed"):
+            c.send_command("robotmode")
+
+
+# ---------------------------------------------------------------------------
+# Remaining control commands
+# ---------------------------------------------------------------------------
+
+class TestRemainingControlCommands:
+    def test_pause(self, client):
+        resp = client.pause()
+        assert resp is not None
+
+    def test_power_off(self, client):
+        resp = client.power_off()
+        assert resp is not None
+
+    def test_popup(self, client):
+        resp = client.popup("Hello")
+        assert resp is not None
+
+    def test_close_popup(self, client):
+        resp = client.close_popup()
+        assert resp is not None
+
+    def test_close_safety_popup(self, client):
+        resp = client.close_safety_popup()
+        assert resp is not None
+
+    def test_unlock_protective_stop(self, client):
+        resp = client.unlock_protective_stop()
+        assert resp is not None
+
+
+# ---------------------------------------------------------------------------
+# DashboardPoller error handling
+# ---------------------------------------------------------------------------
+
+class TestDashboardPollerErrors:
+    @staticmethod
+    def _run_one_poll(poller):
+        """Run exactly one iteration of the poll loop."""
+        def wait_then_stop(timeout):
+            poller._stop_event.set()
+        poller._stop_event.wait = wait_then_stop
+        poller._poll_loop()
+
+    def test_poll_connection_error_reconnects(self):
+        """ConnectionError triggers reconnect attempt."""
+        dc = MagicMock(spec=DashboardClient)
+        dc.connected = True
+        dc.get_robot_mode.side_effect = ConnectionError("lost")
+
+        poller = DashboardPoller(dc, poll_interval=0.01)
+        self._run_one_poll(poller)
+
+        dc.connect.assert_called_once()
+
+    def test_poll_connection_error_reconnect_fails(self):
+        """Failed reconnect is swallowed — will retry next cycle."""
+        dc = MagicMock(spec=DashboardClient)
+        dc.connected = True
+        dc.get_robot_mode.side_effect = ConnectionError("lost")
+        dc.connect.side_effect = ConnectionError("still lost")
+
+        poller = DashboardPoller(dc, poll_interval=0.01)
+        self._run_one_poll(poller)  # should not raise
+
+    def test_poll_unexpected_error(self):
+        """Unexpected exception is caught and doesn't crash the poller."""
+        dc = MagicMock(spec=DashboardClient)
+        dc.connected = True
+        dc.get_robot_mode.side_effect = ValueError("unexpected")
+
+        poller = DashboardPoller(dc, poll_interval=0.01)
+        self._run_one_poll(poller)  # should not raise

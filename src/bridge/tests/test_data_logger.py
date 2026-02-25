@@ -2,11 +2,12 @@
 Unit tests for W26 bridge CSV data logger.
 
 Tests CSV output, decimation, file rotation, annotations, error handling,
-and lifecycle.
+lifecycle, disabled state, and write error recovery.
 """
 
 import csv
 import os
+from unittest.mock import MagicMock
 
 from bridge.data_logger import DataLogger, CSV_COLUMNS
 
@@ -236,3 +237,135 @@ class TestCSVColumns:
         for col in ["timestamp", "mode", "commanded_rate", "actual_rate",
                      "status", "notes", "tmc_sg_result"]:
             assert col in CSV_COLUMNS
+
+
+# ---------------------------------------------------------------------------
+# Disabled state
+# ---------------------------------------------------------------------------
+
+class TestDisabledState:
+    def test_start_when_disabled(self, tmp_path):
+        """start() does nothing when logger is disabled."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl._disabled = True
+        dl.start()
+        assert dl._file is None
+
+    def test_log_tick_when_disabled(self, tmp_path):
+        """log_tick() does nothing when logger is disabled."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl._disabled = True
+        dl.log_tick(_sample_data())  # should not raise
+
+    def test_start_with_bad_directory_disables(self):
+        """start() disables logger if directory creation fails."""
+        dl = DataLogger(log_dir="/proc/nonexistent/impossible")
+        dl.start()
+        assert dl._disabled is True
+
+
+# ---------------------------------------------------------------------------
+# Write error handling
+# ---------------------------------------------------------------------------
+
+class TestWriteErrors:
+    def test_consecutive_write_errors_disable_logger(self, tmp_path):
+        """10 consecutive write errors disable the logger."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl.start()
+
+        # Force write errors by making the writer raise
+        mock_writer = MagicMock()
+        mock_writer.writerow.side_effect = OSError("disk full")
+        dl._writer = mock_writer
+
+        for i in range(10):
+            dl.log_tick(_sample_data(tick_number=i))
+
+        assert dl._disabled is True
+        assert dl._file is None
+
+    def test_successful_write_resets_error_count(self, tmp_path):
+        """Successful write resets consecutive error counter."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl.start()
+        dl._consecutive_errors = 5
+
+        dl.log_tick(_sample_data())
+
+        assert dl._consecutive_errors == 0
+        dl.stop()
+
+    def test_flush_on_interval(self, tmp_path):
+        """File is flushed when flush interval elapses."""
+        dl = DataLogger(log_dir=str(tmp_path), flush_interval=0.0)
+        dl.start()
+
+        # With interval=0, every log_tick should trigger flush
+        dl.log_tick(_sample_data())
+        dl.stop()
+
+        # Just verify no crash — the file was flushed and data is there
+        files = [f for f in os.listdir(tmp_path) if f.endswith(".csv")]
+        _, rows = _read_csv(os.path.join(tmp_path, files[0]))
+        assert len(rows) == 1
+
+
+# ---------------------------------------------------------------------------
+# File rotation internals
+# ---------------------------------------------------------------------------
+
+class TestRotationInternals:
+    def test_maybe_rotate_no_filepath(self, tmp_path):
+        """_maybe_rotate does nothing when filepath is None."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl._filepath = None
+        dl._maybe_rotate()  # should not raise
+
+    def test_maybe_rotate_no_rotate_when_small(self, tmp_path):
+        """_maybe_rotate does nothing when file is under size limit."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl.start()
+        original_filepath = dl._filepath
+
+        dl.log_tick(_sample_data())
+        dl._maybe_rotate()
+
+        assert dl._filepath == original_filepath
+        dl.stop()
+
+    def test_close_file_when_none(self, tmp_path):
+        """_close_file does nothing when no file is open."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl._close_file()  # should not raise
+
+    def test_cleanup_handles_oserror(self, tmp_path):
+        """_cleanup_old_files handles OSError gracefully."""
+        dl = DataLogger(log_dir="/proc/nonexistent")
+        dl._cleanup_old_files()  # should not raise
+
+    def test_close_file_oserror(self, tmp_path):
+        """_close_file handles OSError from flush/close."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl.start()
+
+        # Replace file with one that raises on flush
+        dl._file = MagicMock()
+        dl._file.flush.side_effect = OSError("disk full")
+
+        dl._close_file()  # should not raise
+        assert dl._file is None
+
+    def test_maybe_rotate_getsize_oserror(self, tmp_path):
+        """_maybe_rotate handles OSError from getsize."""
+        dl = DataLogger(log_dir=str(tmp_path))
+        dl.start()
+        original_filepath = dl._filepath
+
+        # Point to a non-existent file path for getsize to fail
+        dl._filepath = "/nonexistent/file.csv"
+        dl._maybe_rotate()
+
+        # Restore so stop() doesn't crash
+        dl._filepath = original_filepath
+        dl.stop()

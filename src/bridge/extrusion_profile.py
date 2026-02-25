@@ -124,10 +124,6 @@ class LookupProfile(ExtrusionProfile):
 
         if self.interpolation == "nearest":
             idx = bisect.bisect_left(self._speeds, speed)
-            if idx == 0:
-                return max(0.0, self._rates[0])
-            if idx >= len(self._speeds):
-                return max(0.0, self._rates[-1])
             # Pick the closer point
             if (speed - self._speeds[idx - 1]) <= (self._speeds[idx] - speed):
                 return max(0.0, self._rates[idx - 1])

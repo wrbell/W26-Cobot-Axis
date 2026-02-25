@@ -3,7 +3,8 @@ Unit tests for bridge.bridge_daemon — Bridge and BridgeState.
 
 Tests command translation, e-stop handling, mode switching, rate clamping,
 homing, reconnection logic, status reporting, shutdown, dry-run mode,
-and main loop mechanics.
+main loop mechanics, subsystem integration (watchdog, dashboard, data
+logging, stall detection, extrusion profiles), and CLI entry point.
 
 All external I/O (RTDEClient, KlipperClient, time) is mocked.
 """
@@ -11,9 +12,16 @@ All external I/O (RTDEClient, KlipperClient, time) is mocked.
 import time as real_time
 
 import pytest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from bridge import config
+from bridge.bridge_daemon import Bridge, main
+from bridge.rtde_client import RTDEClient
+from bridge.klipper_client import KlipperClient
+from bridge.klipper_status import KlipperStatusPoller
+from bridge.data_logger import DataLogger
+from bridge.dashboard_client import DashboardClient, DashboardPoller
+from bridge.stallguard_accumulator import StallGuardAccumulator
 
 
 # ===================================================================
@@ -783,3 +791,1136 @@ class TestTickIntegration:
 
         call_kwargs = bridge.rtde.write_status.call_args[1]
         assert call_kwargs["status"] == config.STATUS_IDLE
+
+
+# ===================================================================
+# Bridge construction with optional subsystems
+# ===================================================================
+
+class TestBridgeConstructor:
+
+    def test_constructor_with_logging_enabled(self):
+        """enable_logging=True creates a DataLogger instance."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        assert b.data_logger is not None
+
+    def test_constructor_with_dashboard_enabled(self):
+        """enable_dashboard=True creates a DashboardClient instance."""
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
+        assert b.dashboard is not None
+
+    def test_constructor_with_sg_accumulator(self):
+        """SG accumulator is created when both sg and status_poll are enabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_sg_accumulator=True,
+                   enable_status_poll=True)
+        assert b.sg_accumulator is not None
+
+    def test_constructor_sg_accumulator_disabled_when_no_poll(self):
+        """SG accumulator is None when status_poll is disabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_sg_accumulator=True,
+                   enable_status_poll=False)
+        assert b.sg_accumulator is None
+
+    def test_constructor_no_dashboard_by_default(self):
+        """Dashboard is None by default."""
+        b = Bridge(ur_host="127.0.0.1")
+        assert b.dashboard is None
+
+
+# ===================================================================
+# _connect_all() retry loops
+# ===================================================================
+
+class TestConnectAll:
+
+    def test_rtde_retry_on_failure(self, bridge):
+        """_connect_all retries RTDE connection on failure."""
+        bridge._running = True
+        attempt = [0]
+
+        def connect_side_effect():
+            attempt[0] += 1
+            if attempt[0] < 2:
+                raise ConnectionError("refused")
+
+        bridge.rtde.connect.side_effect = connect_side_effect
+        bridge.klipper.connect.return_value = None
+        bridge.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            bridge._connect_all()
+
+        assert bridge.rtde.connect.call_count == 2
+
+    def test_klipper_retry_on_failure(self, bridge):
+        """_connect_all retries Klipper connection on failure."""
+        bridge._running = True
+        bridge.rtde.connect.return_value = None
+        attempt = [0]
+
+        def connect_side_effect():
+            attempt[0] += 1
+            if attempt[0] < 2:
+                raise ConnectionError("socket not found")
+
+        bridge.klipper.connect.side_effect = connect_side_effect
+        bridge.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            bridge._connect_all()
+
+        assert bridge.klipper.connect.call_count == 2
+
+    def test_connect_all_with_dashboard(self):
+        """_connect_all connects Dashboard Server when enabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+        b._running = True
+        b.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            b._connect_all()
+
+        b.dashboard.connect.assert_called_once()
+
+    def test_connect_all_dashboard_failure_non_critical(self):
+        """Dashboard connection failure is non-critical — sets dashboard=None."""
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connect.side_effect = ConnectionError("refused")
+        b._running = True
+        b.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            b._connect_all()
+
+        assert b.dashboard is None
+
+    def test_connect_all_stops_when_not_running(self, bridge):
+        """_connect_all() exits RTDE retry loop when _running is False."""
+        bridge._running = False
+        bridge.rtde.connect.side_effect = ConnectionError("refused")
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            bridge._connect_all()
+
+        # Should not have retried since _running is False
+        bridge.rtde.connect.assert_not_called()
+
+
+# ===================================================================
+# _log_robot_info()
+# ===================================================================
+
+class TestLogRobotInfo:
+
+    def test_log_robot_info_queries_dashboard(self):
+        """_log_robot_info reads model, serial, version, mode, safety."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+        b.dashboard.get_robot_model.return_value = "UR30"
+        b.dashboard.get_serial_number.return_value = "123456"
+        b.dashboard.get_polyscope_version.return_value = "5.14"
+        b.dashboard.get_robot_mode.return_value = "RUNNING"
+        b.dashboard.get_safety_mode.return_value = "NORMAL"
+
+        b._log_robot_info()
+
+        b.dashboard.get_robot_model.assert_called_once()
+        b.dashboard.get_serial_number.assert_called_once()
+        b.dashboard.get_polyscope_version.assert_called_once()
+
+    def test_log_robot_info_no_dashboard(self):
+        """_log_robot_info does nothing if dashboard is None."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = None
+
+        b._log_robot_info()  # should not raise
+
+    def test_log_robot_info_disconnected_dashboard(self):
+        """_log_robot_info does nothing if dashboard is disconnected."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = False
+
+        b._log_robot_info()
+        b.dashboard.get_robot_model.assert_not_called()
+
+    def test_log_robot_info_connection_error(self):
+        """_log_robot_info handles ConnectionError gracefully."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+        b.dashboard.get_robot_model.side_effect = ConnectionError("lost")
+
+        b._log_robot_info()  # should not raise
+
+
+# ===================================================================
+# _dashboard_auto_start_sequence()
+# ===================================================================
+
+class TestDashboardAutoStart:
+
+    def _make_bridge_with_dashboard(self):
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True,
+                   dashboard_auto_start=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+        return b
+
+    def test_auto_start_requires_remote_control(self):
+        """Auto-start aborts if not in remote control mode."""
+        b = self._make_bridge_with_dashboard()
+        b.dashboard.is_in_remote_control.return_value = False
+
+        b._dashboard_auto_start_sequence()
+
+        b.dashboard.load_program.assert_not_called()
+        b.dashboard.play.assert_not_called()
+
+    def test_auto_start_powers_on_if_off(self):
+        """Auto-start powers on robot if in POWER_OFF mode."""
+        b = self._make_bridge_with_dashboard()
+        b.dashboard.is_in_remote_control.return_value = True
+        b.dashboard.get_robot_mode.return_value = "POWER_OFF"
+        b.dashboard.load_program.return_value = "Loading program"
+        b.dashboard.play.return_value = "Starting program"
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            b._dashboard_auto_start_sequence()
+
+        b.dashboard.power_on.assert_called_once()
+        b.dashboard.brake_release.assert_called_once()
+        b.dashboard.load_program.assert_called_once()
+        b.dashboard.play.assert_called_once()
+
+    def test_auto_start_skips_power_on_if_running(self):
+        """Auto-start skips power on when robot is already RUNNING."""
+        b = self._make_bridge_with_dashboard()
+        b.dashboard.is_in_remote_control.return_value = True
+        b.dashboard.get_robot_mode.return_value = "RUNNING"
+        b.dashboard.load_program.return_value = "Loading program"
+        b.dashboard.play.return_value = "Starting program"
+
+        b._dashboard_auto_start_sequence()
+
+        b.dashboard.power_on.assert_not_called()
+        b.dashboard.load_program.assert_called_once()
+        b.dashboard.play.assert_called_once()
+
+    def test_auto_start_handles_connection_error(self):
+        """Auto-start handles ConnectionError gracefully."""
+        b = self._make_bridge_with_dashboard()
+        b.dashboard.is_in_remote_control.side_effect = ConnectionError("lost")
+
+        b._dashboard_auto_start_sequence()  # should not raise
+
+    def test_auto_start_noop_if_no_dashboard(self):
+        """Auto-start does nothing when dashboard is None."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = None
+
+        b._dashboard_auto_start_sequence()  # should not raise
+
+    def test_auto_start_noop_if_disconnected(self):
+        """Auto-start does nothing when dashboard is disconnected."""
+        b = self._make_bridge_with_dashboard()
+        b.dashboard.connected = False
+
+        b._dashboard_auto_start_sequence()
+        b.dashboard.is_in_remote_control.assert_not_called()
+
+
+# ===================================================================
+# _tick() with watchdog trigger
+# ===================================================================
+
+class TestWatchdogInTick:
+
+    @staticmethod
+    def _make_triggered_watchdog():
+        """Create a mock Watchdog that reports as triggered."""
+        from bridge.watchdog import Watchdog
+        mock_wd = MagicMock(spec=Watchdog)
+        mock_wd.is_triggered = True
+        return mock_wd
+
+    def test_tick_watchdog_triggered_stops_extrusion(self, bridge, make_cmd):
+        """Watchdog trigger in _tick() stops extrusion and sets error state."""
+        cmd = make_cmd(enable=True, mode=config.MODE_EXTRUDE, extrusion_rate=10.0)
+        bridge.rtde.read_commands.return_value = cmd
+        bridge.watchdog = self._make_triggered_watchdog()
+
+        with patch.object(bridge, "_stop_extrusion") as mock_stop, \
+             patch.object(bridge, "_report_status"), \
+             patch.object(bridge, "_watchdog_recovery"):
+            bridge._tick()
+
+        mock_stop.assert_called_once()
+
+    def test_tick_watchdog_triggered_sets_fault(self, bridge, make_cmd):
+        """Watchdog trigger sets fault=True and ERR_COMMS_LOST."""
+        cmd = make_cmd()
+        bridge.rtde.read_commands.return_value = cmd
+        bridge.watchdog = self._make_triggered_watchdog()
+
+        with patch.object(bridge, "_stop_extrusion"), \
+             patch.object(bridge, "_report_status"), \
+             patch.object(bridge, "_watchdog_recovery"):
+            bridge._tick()
+
+        assert bridge.state.fault is True
+        assert bridge.state.error_code == config.ERR_COMMS_LOST
+        assert bridge.state.status == config.STATUS_ERROR
+
+    def test_tick_watchdog_triggered_annotates_logger(self, make_cmd):
+        """Watchdog trigger annotates data logger with 'WATCHDOG'."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.data_logger = MagicMock(spec=DataLogger)
+        b.watchdog = self._make_triggered_watchdog()
+
+        cmd = make_cmd()
+        b.rtde.read_commands.return_value = cmd
+
+        with patch.object(b, "_stop_extrusion"), \
+             patch.object(b, "_report_status"), \
+             patch.object(b, "_watchdog_recovery"):
+            b._tick()
+
+        b.data_logger.annotate.assert_called_with("WATCHDOG")
+
+    def test_tick_watchdog_triggered_calls_recovery(self, bridge, make_cmd):
+        """Watchdog trigger calls _watchdog_recovery."""
+        cmd = make_cmd()
+        bridge.rtde.read_commands.return_value = cmd
+        bridge.watchdog = self._make_triggered_watchdog()
+
+        with patch.object(bridge, "_stop_extrusion"), \
+             patch.object(bridge, "_report_status"), \
+             patch.object(bridge, "_watchdog_recovery") as mock_recovery:
+            bridge._tick()
+
+        mock_recovery.assert_called_once()
+
+
+# ===================================================================
+# _watchdog_recovery()
+# ===================================================================
+
+class TestWatchdogRecovery:
+
+    def test_recovery_waits_for_fresh_data(self, bridge, make_cmd):
+        """Recovery loop exits when watchdog is no longer triggered."""
+        from bridge.watchdog import Watchdog
+        bridge._running = True
+        mock_wd = MagicMock(spec=Watchdog)
+        # First call: triggered=True (still stale), second: False (fresh)
+        type(mock_wd).is_triggered = property(
+            lambda self: mock_wd._is_triggered_values.pop(0)
+        )
+        mock_wd._is_triggered_values = [False]  # after feed, clear
+        bridge.watchdog = mock_wd
+
+        fresh_cmd = make_cmd()
+        bridge.rtde.read_commands.return_value = fresh_cmd
+
+        with patch("bridge.bridge_daemon.time.sleep"):
+            bridge._watchdog_recovery()
+
+        assert bridge.state.fault is False
+        assert bridge.state.error_code == config.ERR_NONE
+        assert bridge.state.status == config.STATUS_IDLE
+
+    def test_recovery_connection_error_reconnects(self, bridge):
+        """ConnectionError during recovery triggers _connect_all."""
+        bridge._running = True
+        bridge.rtde.read_commands.side_effect = ConnectionError("lost")
+
+        with patch.object(bridge, "_connect_all") as mock_connect:
+            bridge._watchdog_recovery()
+
+        mock_connect.assert_called_once()
+
+    def test_recovery_stops_when_not_running(self, bridge, make_cmd):
+        """Recovery exits when _running is False."""
+        bridge._running = False
+        bridge.watchdog._triggered = True
+
+        bridge._watchdog_recovery()
+
+        bridge.rtde.read_commands.assert_not_called()
+
+
+# ===================================================================
+# _check_dashboard_state()
+# ===================================================================
+
+class TestCheckDashboardState:
+
+    def _make_bridge_with_poller(self):
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard_poller = MagicMock(spec=DashboardPoller)
+        b.data_logger = MagicMock(spec=DataLogger)
+        return b
+
+    def test_noop_without_poller(self, bridge):
+        """_check_dashboard_state does nothing when no poller."""
+        bridge.dashboard_poller = None
+        bridge._check_dashboard_state()  # should not raise
+
+    def test_program_stopped_disables_stepper(self):
+        """Program STOPPED disables stepper when enabled."""
+        b = self._make_bridge_with_poller()
+        b.state.stepper_enabled = True
+        b.dashboard_poller.get_cached_program_state.return_value = "STOPPED"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "NORMAL"
+
+        with patch.object(b, "_stop_extrusion") as mock_stop:
+            b._check_dashboard_state()
+
+        mock_stop.assert_called_once()
+
+    def test_program_paused_disables_stepper(self):
+        """Program PAUSED disables stepper when enabled."""
+        b = self._make_bridge_with_poller()
+        b.state.stepper_enabled = True
+        b.dashboard_poller.get_cached_program_state.return_value = "PAUSED"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "NORMAL"
+
+        with patch.object(b, "_stop_extrusion") as mock_stop:
+            b._check_dashboard_state()
+
+        mock_stop.assert_called_once()
+        b.data_logger.annotate.assert_called_with("UR_PROG_PAUSED")
+
+    def test_program_stopped_annotates_logger(self):
+        """Program STOPPED annotates data logger."""
+        b = self._make_bridge_with_poller()
+        b.state.stepper_enabled = True
+        b.dashboard_poller.get_cached_program_state.return_value = "STOPPED"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "NORMAL"
+
+        with patch.object(b, "_stop_extrusion"):
+            b._check_dashboard_state()
+
+        b.data_logger.annotate.assert_called_with("UR_PROG_STOPPED")
+
+    def test_safety_mode_sets_fault(self):
+        """Non-NORMAL safety mode sets fault and disables stepper."""
+        b = self._make_bridge_with_poller()
+        b.state.stepper_enabled = True
+        b.state.fault = False
+        b.dashboard_poller.get_cached_program_state.return_value = "PLAYING"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "PROTECTIVE_STOP"
+
+        with patch.object(b, "_stop_extrusion"):
+            b._check_dashboard_state()
+
+        assert b.state.fault is True
+        b.data_logger.annotate.assert_called_with("SAFETY_PROTECTIVE_STOP")
+
+    def test_safety_mode_normal_no_fault(self):
+        """NORMAL safety mode does not set fault."""
+        b = self._make_bridge_with_poller()
+        b.state.fault = False
+        b.dashboard_poller.get_cached_program_state.return_value = "PLAYING"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "NORMAL"
+
+        b._check_dashboard_state()
+
+        assert b.state.fault is False
+
+    def test_safety_fault_only_fires_once(self):
+        """Safety fault is only set once (not re-logged if already faulted)."""
+        b = self._make_bridge_with_poller()
+        b.state.fault = True  # already faulted
+        b.dashboard_poller.get_cached_program_state.return_value = "PLAYING"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "PROTECTIVE_STOP"
+
+        b._check_dashboard_state()
+
+        b.data_logger.annotate.assert_not_called()
+
+    def test_program_running_stepper_disabled_no_stop(self):
+        """No stop call when program is STOPPED but stepper already disabled."""
+        b = self._make_bridge_with_poller()
+        b.state.stepper_enabled = False
+        b.dashboard_poller.get_cached_program_state.return_value = "STOPPED"
+        b.dashboard_poller.get_cached_safety_mode.return_value = "NORMAL"
+
+        with patch.object(b, "_stop_extrusion") as mock_stop:
+            b._check_dashboard_state()
+
+        mock_stop.assert_not_called()
+
+
+# ===================================================================
+# _check_stall_status()
+# ===================================================================
+
+class TestCheckStallStatus:
+
+    def _make_bridge_with_status_poller(self):
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.status_poller = MagicMock(spec=KlipperStatusPoller)
+        b.data_logger = MagicMock(spec=DataLogger)
+        return b
+
+    def test_noop_without_poller(self, bridge):
+        """_check_stall_status does nothing when no status_poller."""
+        bridge.status_poller = None
+        bridge._check_stall_status()  # should not raise
+
+    def test_hardware_stall_sets_fault(self):
+        """Hardware stall (core1 DIAG) sets ERR_STALL and fault."""
+        b = self._make_bridge_with_status_poller()
+        b.status_poller.is_hardware_stall.return_value = True
+        b.state.error_code = config.ERR_NONE
+
+        b._check_stall_status()
+
+        assert b.state.error_code == config.ERR_STALL
+        assert b.state.fault is True
+        b.data_logger.annotate.assert_called_with("STALL_HW")
+
+    def test_hardware_stall_only_fires_once(self):
+        """Hardware stall detection doesn't re-log if ERR_STALL already set."""
+        b = self._make_bridge_with_status_poller()
+        b.status_poller.is_hardware_stall.return_value = True
+        b.state.error_code = config.ERR_STALL
+
+        b._check_stall_status()
+
+        b.data_logger.annotate.assert_not_called()
+
+    def test_uart_stall_sets_fault(self):
+        """UART-polled stall sets ERR_STALL and fault."""
+        b = self._make_bridge_with_status_poller()
+        b.status_poller.is_hardware_stall.return_value = False
+        b.status_poller.is_stalled.return_value = True
+        b.state.error_code = config.ERR_NONE
+
+        b._check_stall_status()
+
+        assert b.state.error_code == config.ERR_STALL
+        assert b.state.fault is True
+        b.data_logger.annotate.assert_called_with("STALL")
+
+    def test_uart_stall_only_fires_once(self):
+        """UART stall detection doesn't re-log if ERR_STALL already set."""
+        b = self._make_bridge_with_status_poller()
+        b.status_poller.is_hardware_stall.return_value = False
+        b.status_poller.is_stalled.return_value = True
+        b.state.error_code = config.ERR_STALL
+
+        b._check_stall_status()
+
+        b.data_logger.annotate.assert_not_called()
+
+    def test_hardware_stall_takes_priority(self):
+        """Hardware stall returns early before UART check."""
+        b = self._make_bridge_with_status_poller()
+        b.status_poller.is_hardware_stall.return_value = True
+        b.state.error_code = config.ERR_NONE
+
+        b._check_stall_status()
+
+        # UART stall not checked because hardware stall returned early
+        b.status_poller.is_stalled.assert_not_called()
+
+    def test_no_stall_no_fault(self):
+        """No stall detected: no fault or error changes."""
+        b = self._make_bridge_with_status_poller()
+        b.status_poller.is_hardware_stall.return_value = False
+        b.status_poller.is_stalled.return_value = False
+        b.state.error_code = config.ERR_NONE
+        b.state.fault = False
+
+        b._check_stall_status()
+
+        assert b.state.error_code == config.ERR_NONE
+        assert b.state.fault is False
+
+
+# ===================================================================
+# Bridge-computed extrusion rate (Enhancement 4)
+# ===================================================================
+
+class TestBridgeComputedExtrusion:
+
+    def test_bridge_mode_uses_tcp_speed(self, make_cmd):
+        """extrusion_source=BRIDGE computes rate from tcp_speed * multiplier."""
+        b = Bridge(ur_host="127.0.0.1",
+                   extrusion_source=config.EXTRUSION_MODE_BRIDGE,
+                   extrusion_multiplier=2.0)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+
+        cmd = make_cmd(enable=True, mode=config.MODE_EXTRUDE,
+                       tcp_speed=10.0, extrusion_rate=0.0)
+        b._process_commands(cmd)
+
+        # rate = tcp_speed(10) * multiplier(2) = 20.0
+        call_args = b.klipper.stepper_move.call_args
+        speed = call_args[0][2]
+        assert speed == 20.0
+
+    def test_bridge_mode_ignores_extrusion_rate_field(self, make_cmd):
+        """Bridge mode ignores the extrusion_rate from UR and uses tcp_speed."""
+        b = Bridge(ur_host="127.0.0.1",
+                   extrusion_source=config.EXTRUSION_MODE_BRIDGE,
+                   extrusion_multiplier=1.0)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+
+        cmd = make_cmd(enable=True, mode=config.MODE_EXTRUDE,
+                       tcp_speed=15.0, extrusion_rate=99.0)
+        rate = b._resolve_extrusion_rate(cmd)
+        assert rate == 15.0  # from tcp_speed, not extrusion_rate
+
+    def test_ur_mode_uses_extrusion_rate_field(self, make_cmd):
+        """UR mode uses the extrusion_rate register value."""
+        b = Bridge(ur_host="127.0.0.1",
+                   extrusion_source=config.EXTRUSION_MODE_UR)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+
+        cmd = make_cmd(enable=True, mode=config.MODE_EXTRUDE,
+                       tcp_speed=15.0, extrusion_rate=25.0)
+        rate = b._resolve_extrusion_rate(cmd)
+        assert rate == 25.0
+
+
+# ===================================================================
+# Profile error handling
+# ===================================================================
+
+class TestProfileError:
+
+    def test_apply_profile_error_falls_back_to_raw(self, bridge):
+        """Profile apply error falls back to raw rate."""
+        bridge.active_profile = MagicMock()
+        bridge.active_profile.apply.side_effect = ValueError("bad input")
+
+        result = bridge._apply_profile(10.0)
+
+        assert result == 10.0  # raw rate fallback
+
+
+# ===================================================================
+# _tick() with data logger
+# ===================================================================
+
+class TestDataLoggerInTick:
+
+    def test_tick_logs_telemetry(self, make_cmd):
+        """_tick() calls data_logger.log_tick() with telemetry dict."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.data_logger = MagicMock(spec=DataLogger)
+        b.status_poller = None
+
+        cmd = make_cmd(enable=True, mode=config.MODE_EXTRUDE, extrusion_rate=10.0)
+        b.rtde.read_commands.return_value = cmd
+
+        b._tick()
+
+        b.data_logger.log_tick.assert_called_once()
+        logged_data = b.data_logger.log_tick.call_args[0][0]
+        assert "timestamp" in logged_data
+        assert "loop_dt_ms" in logged_data
+        assert "tick_number" in logged_data
+        assert logged_data["mode"] == config.MODE_EXTRUDE
+
+    def test_tick_logs_tmc_status_when_poller_available(self, make_cmd):
+        """_tick() includes TMC status from status_poller in log data."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.data_logger = MagicMock(spec=DataLogger)
+        b.status_poller = MagicMock(spec=KlipperStatusPoller)
+        b.status_poller.get_tmc_status.return_value = {
+            "drv_status": {"sg_result": 42, "stst": False}
+        }
+        b.status_poller.is_stalled.return_value = False
+        b.status_poller.is_hardware_stall.return_value = False
+        b.status_poller.is_standstill.return_value = False
+
+        cmd = make_cmd()
+        b.rtde.read_commands.return_value = cmd
+
+        b._tick()
+
+        logged_data = b.data_logger.log_tick.call_args[0][0]
+        assert logged_data["tmc_sg_result"] == 42
+        assert logged_data["tmc_standstill"] is False
+
+    def test_tick_connection_error_annotates_logger(self, make_cmd):
+        """ConnectionError in _tick() annotates data_logger with RECONNECT."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.data_logger = MagicMock(spec=DataLogger)
+        b.rtde.read_commands.side_effect = ConnectionError("lost")
+
+        with patch.object(b, "_connect_all"):
+            b._tick()
+
+        b.data_logger.annotate.assert_called_with("RECONNECT")
+
+    def test_tick_estop_annotates_logger(self, make_cmd):
+        """E-stop in _tick() annotates data_logger with ESTOP."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.data_logger = MagicMock(spec=DataLogger)
+
+        cmd = make_cmd(estop=True)
+        b.rtde.read_commands.return_value = cmd
+
+        b._tick()
+
+        b.data_logger.annotate.assert_called_with("ESTOP")
+
+
+# ===================================================================
+# _report_status() with status_poller
+# ===================================================================
+
+class TestReportStatusWithPoller:
+
+    def _make_bridge_with_poller(self):
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.status_poller = MagicMock(spec=KlipperStatusPoller)
+        return b
+
+    def test_standstill_reports_zero_rate(self):
+        """Standstill flag: actual_rate reported as 0.0."""
+        b = self._make_bridge_with_poller()
+        b.state.current_rate = 25.0
+        b.status_poller.is_standstill.return_value = True
+        b.status_poller.is_stalled.return_value = False
+        b.status_poller.get_tmc_status.return_value = {"drv_status": {}}
+
+        b._report_status()
+
+        call_kwargs = b.rtde.write_status.call_args[1]
+        assert call_kwargs["actual_rate"] == 0.0
+
+    def test_stalled_reports_zero_rate(self):
+        """Stalled flag: actual_rate reported as 0.0."""
+        b = self._make_bridge_with_poller()
+        b.state.current_rate = 25.0
+        b.status_poller.is_standstill.return_value = False
+        b.status_poller.is_stalled.return_value = True
+        b.status_poller.get_tmc_status.return_value = {"drv_status": {}}
+
+        b._report_status()
+
+        call_kwargs = b.rtde.write_status.call_args[1]
+        assert call_kwargs["actual_rate"] == 0.0
+
+    def test_moving_reports_commanded_rate(self):
+        """Neither standstill nor stalled: actual_rate = commanded rate."""
+        b = self._make_bridge_with_poller()
+        b.state.current_rate = 25.0
+        b.status_poller.is_standstill.return_value = False
+        b.status_poller.is_stalled.return_value = False
+        b.status_poller.get_tmc_status.return_value = {"drv_status": {}}
+
+        b._report_status()
+
+        call_kwargs = b.rtde.write_status.call_args[1]
+        assert call_kwargs["actual_rate"] == 25.0
+
+    def test_stallguard_load_from_tmc_status(self):
+        """StallGuard load value comes from sg_result in TMC status."""
+        b = self._make_bridge_with_poller()
+        b.status_poller.is_standstill.return_value = False
+        b.status_poller.is_stalled.return_value = False
+        b.status_poller.get_tmc_status.return_value = {
+            "drv_status": {"sg_result": 128}
+        }
+
+        b._report_status()
+
+        call_kwargs = b.rtde.write_status.call_args[1]
+        assert call_kwargs["stallguard_load"] == 128.0
+
+    def test_no_sg_result_reports_zero_load(self):
+        """Missing sg_result: stallguard_load is 0.0."""
+        b = self._make_bridge_with_poller()
+        b.status_poller.is_standstill.return_value = False
+        b.status_poller.is_stalled.return_value = False
+        b.status_poller.get_tmc_status.return_value = {"drv_status": {}}
+
+        b._report_status()
+
+        call_kwargs = b.rtde.write_status.call_args[1]
+        assert call_kwargs["stallguard_load"] == 0.0
+
+
+# ===================================================================
+# stop() with all subsystems active
+# ===================================================================
+
+class TestStopWithSubsystems:
+
+    def test_stop_with_status_poller(self):
+        """stop() stops the status poller."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.status_poller = MagicMock(spec=KlipperStatusPoller)
+
+        b.stop()
+
+        b.status_poller.stop.assert_called_once()
+
+    def test_stop_with_dashboard_poller(self):
+        """stop() stops the dashboard poller."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.dashboard_poller = MagicMock(spec=DashboardPoller)
+
+        b.stop()
+
+        b.dashboard_poller.stop.assert_called_once()
+
+    def test_stop_with_data_logger(self):
+        """stop() stops the data logger."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.data_logger = MagicMock(spec=DataLogger)
+
+        b.stop()
+
+        b.data_logger.stop.assert_called_once()
+
+    def test_stop_with_sg_accumulator_logs_summary(self):
+        """stop() logs StallGuard accumulator summary."""
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.sg_accumulator = MagicMock(spec=StallGuardAccumulator)
+        b.sg_accumulator.get_summary.return_value = {"count": 0}
+
+        b.stop()
+
+        b.sg_accumulator.get_summary.assert_called_once()
+
+    def test_stop_disconnects_dashboard(self):
+        """stop() disconnects the dashboard client."""
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+
+        b.stop()
+
+        b.dashboard.disconnect.assert_called_once()
+
+    def test_stop_dashboard_disconnect_error_suppressed(self):
+        """stop() suppresses errors from dashboard disconnect."""
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+        b.dashboard.disconnect.side_effect = RuntimeError("failed")
+
+        b.stop()  # should not raise
+
+
+# ===================================================================
+# start() with subsystems
+# ===================================================================
+
+class TestStartWithSubsystems:
+
+    def test_start_starts_status_poller(self):
+        """start() calls status_poller.start()."""
+        b = Bridge(ur_host="127.0.0.1", enable_status_poll=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.status_poller = MagicMock(spec=KlipperStatusPoller)
+
+        def tick_then_stop():
+            b._running = False
+
+        with patch.object(b, "_connect_all"), \
+             patch.object(b, "_tick", side_effect=tick_then_stop), \
+             patch("bridge.bridge_daemon.time.sleep"):
+            b.start()
+
+        b.status_poller.start.assert_called_once()
+
+    def test_start_starts_data_logger(self):
+        """start() calls data_logger.start() when logging is enabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_logging=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.data_logger = MagicMock(spec=DataLogger)
+
+        def tick_then_stop():
+            b._running = False
+
+        with patch.object(b, "_connect_all"), \
+             patch.object(b, "_tick", side_effect=tick_then_stop), \
+             patch("bridge.bridge_daemon.time.sleep"):
+            b.start()
+
+        b.data_logger.start.assert_called_once()
+
+
+# ===================================================================
+# main() CLI entry point
+# ===================================================================
+
+class TestMainCLI:
+
+    def test_main_default_args(self):
+        """main() parses default args and creates a Bridge."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            MockBridge.assert_called_once()
+            mock_bridge.start.assert_called_once()
+
+    def test_main_dry_run(self):
+        """main() passes dry_run=True when --dry-run is given."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--dry-run"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["dry_run"] is True
+
+    def test_main_host_arg(self):
+        """main() passes custom host."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--host", "10.0.0.1"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["ur_host"] == "10.0.0.1"
+
+    def test_main_bridge_extrusion_source(self):
+        """main() maps --extrusion-source bridge to EXTRUSION_MODE_BRIDGE."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--extrusion-source", "bridge"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["extrusion_source"] == config.EXTRUSION_MODE_BRIDGE
+
+    def test_main_dashboard_auto_implies_dashboard(self):
+        """main() --dashboard-auto implies --dashboard."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--dashboard-auto"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["enable_dashboard"] is True
+            assert call_kwargs["dashboard_auto_start"] is True
+
+    def test_main_no_watchdog(self):
+        """main() --no-watchdog disables watchdog."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--no-watchdog"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["enable_watchdog"] is False
+
+    def test_main_logging_flags(self):
+        """main() --log enables logging."""
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal"), \
+             patch("sys.argv", ["bridge_daemon", "--log"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            call_kwargs = MockBridge.call_args[1]
+            assert call_kwargs["enable_logging"] is True
+
+    def test_main_invalid_multiplier(self):
+        """main() rejects --extrusion-multiplier <= 0."""
+        with patch("sys.argv", ["bridge_daemon", "--extrusion-multiplier", "0"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_main_sigterm_handler(self):
+        """main() registers SIGTERM handler."""
+        import signal as sig
+        with patch("bridge.bridge_daemon.Bridge") as MockBridge, \
+             patch("bridge.bridge_daemon.signal.signal") as mock_signal, \
+             patch("sys.argv", ["bridge_daemon"]):
+            mock_bridge = MagicMock()
+            MockBridge.return_value = mock_bridge
+
+            main()
+
+            # SIGTERM handler was registered
+            signal_calls = [c for c in mock_signal.call_args_list
+                            if c[0][0] == sig.SIGTERM]
+            assert len(signal_calls) == 1
+
+
+# ===================================================================
+# _connect_all with dashboard auto-start
+# ===================================================================
+
+class TestConnectAllDashboardAutoStart:
+
+    def test_connect_all_triggers_auto_start(self):
+        """_connect_all calls _dashboard_auto_start_sequence when enabled."""
+        b = Bridge(ur_host="127.0.0.1", enable_dashboard=True,
+                   dashboard_auto_start=True)
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.dashboard = MagicMock(spec=DashboardClient)
+        b.dashboard.connected = True
+        b._running = True
+        b.klipper.get_info.return_value = {"state_message": "ready"}
+
+        with patch("bridge.bridge_daemon.time.sleep"), \
+             patch.object(b, "_log_robot_info"), \
+             patch.object(b, "_dashboard_auto_start_sequence") as mock_auto:
+            b._connect_all()
+
+        mock_auto.assert_called_once()
+
+
+# ===================================================================
+# _watchdog_recovery sleep path
+# ===================================================================
+
+class TestWatchdogRecoverySleep:
+
+    def test_recovery_loop_sleeps_between_reads(self):
+        """_watchdog_recovery sleeps LOOP_PERIOD between RTDE reads."""
+        from bridge.watchdog import Watchdog
+        b = Bridge(ur_host="127.0.0.1")
+        b.rtde = MagicMock(spec=RTDEClient)
+        b.klipper = MagicMock(spec=KlipperClient)
+        b.rtde.connected = True
+        b.klipper.connected = True
+        b._running = True
+
+        # Replace watchdog with a mock that stays triggered once, then clears
+        mock_wd = MagicMock(spec=Watchdog)
+        call_count = [0]
+
+        def is_triggered_side_effect():
+            call_count[0] += 1
+            return call_count[0] < 2  # triggered first, then cleared
+
+        type(mock_wd).is_triggered = property(
+            lambda self: is_triggered_side_effect()
+        )
+        b.watchdog = mock_wd
+        b.rtde.read_commands.return_value = {"timestamp": 1.0}
+
+        with patch("bridge.bridge_daemon.time.sleep") as mock_sleep:
+            b._watchdog_recovery()
+
+        # Sleep was called at least once (between iterations)
+        mock_sleep.assert_called_with(config.LOOP_PERIOD)
+
+
+# ===================================================================
+# __main__.py
+# ===================================================================
+
+class TestMainModule:
+
+    def test_main_module_calls_main(self):
+        """python -m bridge calls main()."""
+        with patch("bridge.bridge_daemon.main") as mock_main:
+            import importlib
+            import bridge.__main__  # noqa: F811
+            importlib.reload(bridge.__main__)
+            mock_main.assert_called()

@@ -214,12 +214,10 @@ class TestRecv:
 
 class TestRequest:
 
-    def _respond_in_thread(self, fake_klippy, msg_id, result=None, delay=0.0):
+    def _respond_in_thread(self, fake_klippy, result=None):
         """Helper: respond to a request from a background thread."""
         def _respond():
             req = fake_klippy.recv_request(timeout=5.0)
-            if delay > 0:
-                time.sleep(delay)
             fake_klippy.send_response(req["id"], result or {})
         t = threading.Thread(target=_respond)
         t.start()
@@ -227,7 +225,7 @@ class TestRequest:
 
     def test_request_sends_and_receives(self, klipper_client, fake_klippy):
         """request() sends a method call and returns the result dict."""
-        t = self._respond_in_thread(fake_klippy, 1, {"state": "ready"})
+        t = self._respond_in_thread(fake_klippy, {"state": "ready"})
         result = klipper_client.request("info", timeout=5.0)
         t.join(timeout=5)
         assert result == {"state": "ready"}
@@ -521,3 +519,70 @@ class TestEdgeCases:
         assert results[0]["method_echo"] == "info"
         assert results[1] is not None
         assert results[1]["method_echo"] == "objects/query"
+
+
+# ===================================================================
+# 4.8  Connect success path + request timeout
+# ===================================================================
+
+class TestConnectSuccess:
+
+    def test_connect_success_via_unix_socketpair(self):
+        """connect() succeeds with a valid Unix socket path."""
+        import socket as sock
+        import os
+        import tempfile
+
+        # Create a temporary server socket
+        tmpdir = tempfile.mkdtemp()
+        sock_path = os.path.join(tmpdir, "klippy_test.sock")
+
+        server = sock.socket(sock.AF_UNIX, sock.SOCK_STREAM)
+        server.bind(sock_path)
+        server.listen(1)
+
+        try:
+            kc = KlipperClient(socket_path=sock_path)
+            kc.connect()
+
+            assert kc.connected is True
+            assert kc._recv_buf == b""
+            kc.disconnect()
+        finally:
+            server.close()
+            os.unlink(sock_path)
+            os.rmdir(tmpdir)
+
+
+class TestRequestTimeout:
+
+    def test_request_timeout_raises(self, klipper_client, fake_klippy):
+        """request() raises TimeoutError when deadline expires after wrong-ID response."""
+        from unittest.mock import patch
+
+        # Server sends a response with wrong ID
+        def _send_wrong_id():
+            fake_klippy.recv_request(timeout=5.0)
+            fake_klippy.send_response(999, {})
+
+        t = threading.Thread(target=_send_wrong_id)
+        t.start()
+
+        # Mock time.monotonic so the deadline expires after the first _recv:
+        # Call 1 (deadline = monotonic + timeout): return 1000.0
+        # Call 2 (first remaining check): return 1000.0 (remaining > 0, enters _recv)
+        # Call 3 (second remaining check after wrong-ID): return 9999.0 (remaining <= 0)
+        call_count = [0]
+        def fake_monotonic():
+            call_count[0] += 1
+            if call_count[0] <= 2:
+                return 1000.0
+            return 9999.0
+
+        with patch("bridge.klipper_client.time") as mock_time:
+            mock_time.monotonic = fake_monotonic
+            with pytest.raises(TimeoutError, match="No response"):
+                klipper_client.request("info", timeout=1.0)
+
+        t.join(timeout=5)
+        t.join(timeout=5)

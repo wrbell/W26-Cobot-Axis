@@ -333,3 +333,244 @@ class TestBridgeStallGuard:
 
         call_kwargs = b.rtde.write_status.call_args[1]
         assert call_kwargs["stallguard_load"] == 0.0
+
+
+# ===================================================================
+# 5. KlipperStatusPoller: additional coverage (stepper, stall, standstill,
+#    poll loop error handling, lifecycle)
+# ===================================================================
+
+class TestKlipperStatusPollerAdditional:
+
+    @pytest.fixture
+    def poller(self):
+        kc = MagicMock()
+        return KlipperStatusPoller(klipper_client=kc)
+
+    # --- is_stepper_enabled ---
+
+    def test_is_stepper_enabled_true(self, poller):
+        """is_stepper_enabled returns True when stepper is in enabled set."""
+        poller._stepper_enabled_set = {"manual_stepper pump"}
+        assert poller.is_stepper_enabled("pump") is True
+
+    def test_is_stepper_enabled_false(self, poller):
+        """is_stepper_enabled returns False when stepper not in set."""
+        poller._stepper_enabled_set = set()
+        assert poller.is_stepper_enabled("pump") is False
+
+    def test_is_stepper_enabled_default_name(self, poller):
+        """is_stepper_enabled uses config.STEPPER_NAME by default."""
+        poller._stepper_enabled_set = {f"manual_stepper {config.STEPPER_NAME}"}
+        assert poller.is_stepper_enabled() is True
+
+    # --- is_stalled ---
+
+    def test_is_stalled_true_when_below_threshold(self, poller):
+        """is_stalled() returns True when sg_result < STALLGUARD_THRESHOLD."""
+        poller._last_tmc_status = {"drv_status": {"sg_result": 5}}
+        assert poller.is_stalled() is True
+
+    def test_is_stalled_false_when_above_threshold(self, poller):
+        """is_stalled() returns False when sg_result >= threshold."""
+        poller._last_tmc_status = {"drv_status": {"sg_result": 100}}
+        assert poller.is_stalled() is False
+
+    def test_is_stalled_false_when_no_tmc_data(self, poller):
+        """is_stalled() returns False when no TMC data cached."""
+        assert poller.is_stalled() is False
+
+    def test_is_stalled_false_when_tmc_unavailable(self, poller):
+        """is_stalled() returns False when TMC is marked unavailable."""
+        poller._tmc_available = False
+        poller._last_tmc_status = {"drv_status": {"sg_result": 0}}
+        assert poller.is_stalled() is False
+
+    def test_is_stalled_false_when_no_sg_result(self, poller):
+        """is_stalled() returns False when drv_status has no sg_result."""
+        poller._last_tmc_status = {"drv_status": {}}
+        assert poller.is_stalled() is False
+
+    def test_is_stalled_false_when_no_drv_status(self, poller):
+        """is_stalled() returns False when no drv_status key."""
+        poller._last_tmc_status = {"some_other_key": {}}
+        assert poller.is_stalled() is False
+
+    # --- is_standstill ---
+
+    def test_is_standstill_true(self, poller):
+        """is_standstill() returns True when stst flag is set."""
+        poller._last_tmc_status = {"drv_status": {"stst": True}}
+        assert poller.is_standstill() is True
+
+    def test_is_standstill_false(self, poller):
+        """is_standstill() returns False when stst flag is not set."""
+        poller._last_tmc_status = {"drv_status": {"stst": False}}
+        assert poller.is_standstill() is False
+
+    def test_is_standstill_false_when_no_data(self, poller):
+        """is_standstill() returns False when no TMC data."""
+        assert poller.is_standstill() is False
+
+    def test_is_standstill_false_when_tmc_unavailable(self, poller):
+        """is_standstill() returns False when TMC unavailable."""
+        poller._tmc_available = False
+        poller._last_tmc_status = {"drv_status": {"stst": True}}
+        assert poller.is_standstill() is False
+
+    # --- start() idempotency ---
+
+    def test_start_twice_no_double_thread(self, poller):
+        """Calling start() twice does not create a second thread."""
+        # Start with a mock thread that's alive
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        poller._thread = mock_thread
+
+        poller.start()
+
+        # Should NOT have created a new thread
+        assert poller._thread is mock_thread
+
+    # --- _poll_loop error handling ---
+
+    @staticmethod
+    def _run_one_poll_iteration(poller):
+        """Run _poll_loop for exactly one iteration, then stop."""
+
+        def wait_then_stop(timeout):
+            poller._stop_event.set()
+            # Don't actually wait
+
+        poller._stop_event.wait = wait_then_stop
+        poller._poll_loop()
+
+    def test_poll_loop_timeout_error(self, poller):
+        """TimeoutError in _poll_once increments stale_count."""
+        poller._klipper.query_status.side_effect = TimeoutError("timeout")
+
+        self._run_one_poll_iteration(poller)
+
+        assert poller._stale_count == 1
+
+    def test_poll_loop_connection_error(self, poller):
+        """ConnectionError in _poll_once increments stale_count."""
+        poller._klipper.query_status.side_effect = ConnectionError("lost")
+
+        self._run_one_poll_iteration(poller)
+
+        assert poller._stale_count == 1
+
+    def test_poll_loop_tmc_runtime_error_disables_tmc(self, poller):
+        """RuntimeError mentioning tmc2209 disables TMC queries."""
+        poller._klipper.query_status.side_effect = RuntimeError(
+            "Unknown object 'tmc2209 manual_stepper pump'"
+        )
+
+        self._run_one_poll_iteration(poller)
+
+        assert poller._tmc_available is False
+
+    def test_poll_loop_stallguard_runtime_error_disables_sg(self, poller):
+        """RuntimeError mentioning stallguard disables StallGuard queries."""
+        poller._klipper.query_status.side_effect = RuntimeError(
+            "Unknown object 'stallguard_monitor'"
+        )
+
+        self._run_one_poll_iteration(poller)
+
+        assert poller._stallguard_available is False
+
+    def test_poll_loop_generic_runtime_error(self, poller):
+        """Generic RuntimeError is logged but doesn't disable queries."""
+        poller._klipper.query_status.side_effect = RuntimeError("something else")
+
+        self._run_one_poll_iteration(poller)
+
+        assert poller._tmc_available is True
+        assert poller._stallguard_available is True
+
+    def test_poll_loop_unexpected_error(self, poller):
+        """Unexpected exception is caught and logged."""
+        poller._klipper.query_status.side_effect = ValueError("unexpected")
+
+        self._run_one_poll_iteration(poller)
+
+        # Should not crash, stale_count not incremented for generic errors
+        assert poller._stale_count == 0
+
+    def test_poll_success_resets_stale_count(self, poller):
+        """Successful poll resets stale_count to 0."""
+        poller._stale_count = 5
+        poller._klipper.query_status.return_value = {
+            "status": {
+                "stepper_enable": {"steppers": {}},
+                "tmc2209 manual_stepper pump": {},
+                "stallguard_monitor": {},
+            }
+        }
+
+        self._run_one_poll_iteration(poller)
+
+        assert poller._stale_count == 0
+
+    # --- _poll_once TMC/stepper update paths ---
+
+    def test_poll_once_updates_stepper_enabled_set(self, poller):
+        """_poll_once updates the stepper enabled set from response."""
+        poller._klipper.query_status.return_value = {
+            "status": {
+                "stepper_enable": {
+                    "steppers": {
+                        "manual_stepper pump": True,
+                        "stepper_x": False,
+                    }
+                },
+                "tmc2209 manual_stepper pump": {"drv_status": {"sg_result": 42}},
+                "stallguard_monitor": {},
+            }
+        }
+        poller._poll_once()
+
+        assert "manual_stepper pump" in poller._stepper_enabled_set
+        assert "stepper_x" not in poller._stepper_enabled_set
+
+    def test_poll_once_skips_tmc_when_unavailable(self, poller):
+        """_poll_once skips TMC query when tmc_available is False."""
+        poller._tmc_available = False
+        poller._klipper.query_status.return_value = {
+            "status": {
+                "stepper_enable": {"steppers": {}},
+                "stallguard_monitor": {},
+            }
+        }
+        poller._poll_once()
+
+        call_args = poller._klipper.query_status.call_args[0][0]
+        assert "tmc2209 manual_stepper pump" not in call_args
+
+    def test_poll_once_feeds_sg_accumulator(self, poller):
+        """_poll_once feeds the SG accumulator with polled data."""
+        mock_acc = MagicMock()
+        poller.set_accumulator(mock_acc)
+        poller._klipper.query_status.return_value = {
+            "status": {
+                "stepper_enable": {"steppers": {}},
+                "tmc2209 manual_stepper pump": {
+                    "drv_status": {"sg_result": 128}
+                },
+                "stallguard_monitor": {
+                    "stall_active": False,
+                    "stall_count": 0,
+                    "last_stall_ticks": 0,
+                },
+            }
+        }
+        poller._poll_once()
+
+        mock_acc.record.assert_called_once_with(
+            sg_result=128,
+            stall_active=False,
+            stall_count=0,
+            last_stall_ticks=0,
+        )

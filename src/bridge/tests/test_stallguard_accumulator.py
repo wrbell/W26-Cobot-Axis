@@ -109,7 +109,7 @@ class TestAccumulatorRecord:
                 for i in range(100):
                     acc.record(sg_result=start_val + i, stall_active=False,
                                stall_count=0, last_stall_ticks=0)
-            except Exception as exc:
+            except Exception as exc:  # pragma: no cover
                 errors.append(exc)
 
         threads = [threading.Thread(target=writer, args=(i * 1000,)) for i in range(4)]

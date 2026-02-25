@@ -11,6 +11,7 @@ import os
 import pytest
 
 from bridge.extrusion_profile import (
+    ExtrusionProfile,
     LinearProfile,
     PolynomialProfile,
     LookupProfile,
@@ -219,7 +220,7 @@ class TestLoadProfiles:
     def test_load_real_profiles_json(self):
         """Load the actual profiles.json shipped with the bridge."""
         path = os.path.join(os.path.dirname(__file__), "..", "profiles.json")
-        if not os.path.exists(path):
+        if not os.path.exists(path):  # pragma: no cover
             pytest.skip("profiles.json not found")
         profiles, active = load_profiles(path)
         assert len(profiles) >= 1
@@ -261,3 +262,91 @@ class TestLoadActiveProfile:
         path.write_text(json.dumps(data))
         p = load_active_profile(profile_file=str(path), profile_name="b")
         assert p.apply(10.0) == 30.0
+
+
+# ---------------------------------------------------------------------------
+# Base class
+# ---------------------------------------------------------------------------
+
+class TestExtrusionProfileBase:
+    def test_apply_raises_not_implemented(self):
+        """Base ExtrusionProfile.apply() raises NotImplementedError."""
+        p = ExtrusionProfile()
+        with pytest.raises(NotImplementedError):
+            p.apply(10.0)
+
+    def test_validate_is_noop(self):
+        """Base validate() does nothing (returns None)."""
+        p = ExtrusionProfile()
+        assert p.validate() is None
+
+
+# ---------------------------------------------------------------------------
+# __repr__ methods
+# ---------------------------------------------------------------------------
+
+class TestReprMethods:
+    def test_polynomial_repr(self):
+        p = PolynomialProfile(coefficients=[1.0, 2.0])
+        assert "PolynomialProfile" in repr(p)
+        assert "[1.0, 2.0]" in repr(p)
+
+    def test_lookup_repr(self):
+        p = LookupProfile(points=[[0, 0], [10, 20]])
+        assert "LookupProfile" in repr(p)
+        assert "points=2" in repr(p)
+
+
+# ---------------------------------------------------------------------------
+# LookupProfile nearest interpolation edge cases
+# ---------------------------------------------------------------------------
+
+class TestLookupNearestEdgeCases:
+    def test_nearest_at_first_point(self):
+        """Nearest interpolation: idx==0 returns first rate."""
+        p = LookupProfile(
+            points=[[0, 0], [10, 20], [20, 40]],
+            interpolation="nearest",
+        )
+        # Speed just above 0 -> should return first point
+        result = p.apply(0.001)
+        assert result == 0.0
+
+    def test_nearest_at_last_point(self):
+        """Nearest interpolation: idx>=len returns last rate."""
+        p = LookupProfile(
+            points=[[0, 0], [10, 20], [20, 40]],
+            interpolation="nearest",
+        )
+        # Speed just below 20 -> should return nearest of 10 or 20
+        result = p.apply(19.9)
+        assert result == 40.0
+
+
+# ---------------------------------------------------------------------------
+# load_profiles with invalid profile spec
+# ---------------------------------------------------------------------------
+
+class TestLoadProfilesError:
+    def test_invalid_profile_skipped(self, tmp_path):
+        """A profile that fails to build is skipped (logged, not loaded)."""
+        data = {
+            "profiles": {
+                "bad_poly": {
+                    "type": "polynomial",
+                    "coefficients": [],  # validate() rejects empty
+                },
+                "good_linear": {
+                    "type": "linear",
+                    "multiplier": 1.0,
+                },
+            },
+            "active_profile": "good_linear",
+        }
+        path = tmp_path / "profiles.json"
+        path.write_text(json.dumps(data))
+
+        profiles, active = load_profiles(str(path))
+
+        assert "good_linear" in profiles
+        assert "bad_poly" not in profiles  # was skipped due to validation error

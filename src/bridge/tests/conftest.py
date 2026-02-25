@@ -43,7 +43,7 @@ class FakeKlippy:
         self.sock.settimeout(timeout)
         while ETX not in self._buf:
             chunk = self.sock.recv(4096)
-            if not chunk:
+            if not chunk:  # pragma: no cover
                 raise ConnectionError("Client closed connection")
             self._buf += chunk
         msg_raw, self._buf = self._buf.split(ETX, 1)
@@ -64,12 +64,6 @@ class FakeKlippy:
         payload = {"method": method, "params": params or {}}
         self.sock.sendall(json.dumps(payload).encode() + ETX)
 
-    def send_raw(self, data: bytes) -> None:
-        """Send raw bytes (for testing malformed input, split chunks, etc.)."""
-        self.sock.sendall(data)
-
-    def close(self):
-        self.sock.close()
 
 
 # ---------------------------------------------------------------------------

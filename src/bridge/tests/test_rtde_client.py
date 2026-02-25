@@ -404,3 +404,40 @@ class TestConvenienceMethods:
         client, mocks = mocked_client
         mocks["recv"].getRobotMode.return_value = 3
         assert client.get_robot_mode() == 3
+
+
+# ===================================================================
+# 5.6  ImportError fallback (lines 25-27)
+# ===================================================================
+
+class TestImportFallback:
+
+    def test_import_error_sets_has_ur_rtde_false(self):
+        """When rtde_receive/rtde_control are not importable, HAS_UR_RTDE is False."""
+        import importlib
+        import sys
+
+        # Save originals
+        orig_recv = sys.modules.get("rtde_receive")
+        orig_ctrl = sys.modules.get("rtde_control")
+
+        try:
+            # Block the imports by setting modules to None
+            sys.modules["rtde_receive"] = None
+            sys.modules["rtde_control"] = None
+
+            import bridge.rtde_client as mod
+            importlib.reload(mod)
+
+            assert mod.HAS_UR_RTDE is False
+        finally:
+            # Restore originals and reload to clean state
+            for name, orig in [("rtde_receive", orig_recv),
+                               ("rtde_control", orig_ctrl)]:
+                if orig is not None:
+                    sys.modules[name] = orig
+                else:
+                    sys.modules.pop(name, None)  # pragma: no cover
+
+            import bridge.rtde_client as mod
+            importlib.reload(mod)
