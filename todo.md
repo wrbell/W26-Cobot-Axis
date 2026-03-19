@@ -322,6 +322,23 @@ All software features are being designed before implementation. Design docs in `
 - [x] **Update `docs/pi_power.md`** — fixed stale dual-Pi architecture references
 - [x] **Stepper driving design** → `docs/design/stepper_driving.md` — consolidated justification for manual_stepper, TMC2209 config, step generation pipeline, calibration
 
+### Release v1.0.0 — Pre-Hardware
+
+Software-complete milestone. All bridge code is written and tested (479 tests, 100% coverage). Tag v1.0.0 before hardware arrives so we have a known-good baseline to deploy.
+
+#### Software Fixes (code changes needed)
+- [ ] **Add `SYNC=0` to `stepper_move()`** — `klipper_client.py:150` sends `MANUAL_STEPPER STEPPER=pump MOVE=... SPEED=...` without `SYNC=0`. Klipper blocks the gcode response until the move physically completes — at 125 Hz main loop this freezes the bridge for the entire move duration (seconds). Append ` SYNC=0` to the gcode string. Update tests.
+- [ ] **Add `SYNC=0` to `stepper_set_position()`** — same issue at `klipper_client.py:157`. SET_POSITION doesn't block as long but should be non-blocking for consistency. Update tests.
+
+#### Validation (no code changes — just run/review things)
+- [ ] **URSim smoke test** — spin up URSim Docker, connect bridge with `--dry-run`, verify RTDE register round-trip, mode transitions, e-stop. Proves the RTDE path works before touching real hardware.
+- [ ] **deploy.sh review** — read through deploy.sh, verify step order makes sense, no stale paths. Can't fully dry-run without Pi but review logic.
+- [ ] **printer.cfg review** — confirm pin assignments, TMC2209 UART addresses, motor defaults are sensible starting points (`rotation_distance` will need calibration on hardware).
+- [ ] **Release candidate tag** — push `v1.0.0-rc1`, verify release workflow fires: CI green, firmware .uf2 builds, GitHub Release created with artifacts.
+
+#### Release
+- [ ] **Tag v1.0.0** — push tag, release workflow (`.github/workflows/release.yml`) creates GitHub Release with klipper.uf2 + PDFs. This is the "software-complete, ready for hardware" milestone.
+
 ---
 
 ## Phase 3: Build and Additional Design/Analysis (Weeks 9–11, Mar 2–22)
@@ -354,6 +371,18 @@ These are known gotchas from the end-to-end audit. Check each before testing.
 - [ ] **Use `--dry-run` for RTDE-only testing** — skips Klipper connection entirely, just logs what commands would be sent
 - [ ] **Dashboard Server is opt-in** — off by default. Only enable with `--dashboard` if URSim exposes port 29999.
 
+### Dev Bench Setup (can start now)
+
+Full guide: `docs/dev_bench_guide.md`
+
+- [ ] **Image SD card** — MainsailOS, hostname `w26-dev`, user `pi`, SSH enabled
+- [ ] **First boot + verify** — SSH in, Klipper/Moonraker active, Mainsail web UI loads
+- [ ] **Clone repo + deploy** — `git clone` then `bash deploy.sh` (builds firmware, installs service)
+- [ ] **URSim on Windows** — Docker Desktop, `docker run` with ports 30004/29999/6080, power on virtual robot
+- [ ] **Configure bridge for URSim** — systemd override: `--host <WINDOWS_IP> --log-level DEBUG`
+- [ ] **End-to-end motor test** — Mainsail console: `MANUAL_STEPPER STEPPER=pump MOVE=10 SPEED=5`
+- [ ] **RTDE round-trip** — load `test_basic.script` in URSim, verify motor responds via bridge
+
 ### Pre-Hardware: URSim Validation (can start now)
 
 - [ ] **Set up URSim on Windows** — `docker run --platform=linux/amd64 -e ROBOT_MODEL=UR30 -p 30004:30004 -p 29999:29999 -p 6080:6080 universalrobots/ursim_e-series`
@@ -377,6 +406,17 @@ These are known gotchas from the end-to-end audit. Check each before testing.
 - [ ] Deploy `printer.cfg` to `~/printer_data/config/`, update `[mcu]` serial path
 - [ ] Restart Klipper, confirm `Printer is ready` in klippy.log and Mainsail shows green
 - [ ] Verify StallGuard via Moonraker: `curl http://localhost:7125/printer/objects/query?stallguard_monitor`
+
+### Hardware Configuration & Calibration
+
+Full guide: `docs/config_guide.md` — covers motor current, rotation distance, velocity/accel, StealthChop, bridge safety limits, extrusion multiplier, URScript waypoints, and cross-file sync.
+
+- [ ] **Determine motor specs** — step angle, coil resistance, rated current (no datasheet procedure)
+- [ ] **Calibrate run_current** — experimental sweep from 0.3A, thermal + stall testing
+- [ ] **Calibrate rotation_distance** — measure actual pump displacement per revolution
+- [ ] **Tune velocity/accel** — find mechanical stall limit, set to 80%
+- [ ] **Teach URScript waypoints** — `START_POSE`, `MID_POSE`, `END_POSE` in all 3 scripts
+- [ ] **Sync cross-file values** — max speed, accel, extrusion multiplier across printer.cfg / config.py / URScript
 
 ### Stage 3: First Stepper Motion (Week 9, Day 2–3)
 

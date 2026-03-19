@@ -139,6 +139,8 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | HITL test plan (StallGuard + URSim) | `docs/design/hitl_plan.md` |
 | CI/CD setup guide (Tiers 1–3) | `docs/design/ci_cd_guide.md` |
 | URSim quick-start runbook | `docs/ursim_quickstart.md` |
+| Dev bench bring-up guide | `docs/dev_bench_guide.md` |
+| Hardware config & calibration guide | `docs/config_guide.md` |
 | Trade: Klipper vs Lingua Franca | `trades/lingua_franca_vs_klipper.md` |
 | Trade: Communication protocol | `trades/comms.md` |
 | Trade: MCU platform | `trades/mcu.md` |

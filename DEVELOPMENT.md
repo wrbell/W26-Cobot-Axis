@@ -312,6 +312,14 @@ See [`docs/ursim_quickstart.md`](docs/ursim_quickstart.md) for setup instruction
 
 ---
 
+## Dev Bench (Real Hardware)
+
+If you have a Pi, SKR Pico, and stepper motor, you can set up a dev bench that validates the full signal chain (RTDE → bridge → Klipper → motor) using URSim instead of a real UR30.
+
+See [`docs/dev_bench_guide.md`](docs/dev_bench_guide.md) for the complete bring-up guide. The key difference from prod is a single systemd override that points `--host` at your Windows PC running URSim instead of the UR30.
+
+---
+
 ## Deploying to Pi
 
 When you're ready to deploy to a real Raspberry Pi:

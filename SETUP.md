@@ -28,6 +28,7 @@ Step-by-step guide for setting up the complete software stack on a fresh Raspber
 | Guide | Purpose |
 |-------|---------|
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Set up a local dev/test environment (no hardware needed) |
+| [docs/dev_bench_guide.md](docs/dev_bench_guide.md) | Dev bench bring-up (Pi + SKR Pico + URSim) |
 | [docs/ursim_quickstart.md](docs/ursim_quickstart.md) | Test against URSim on Windows |
 | [docs/design/ci_cd_guide.md](docs/design/ci_cd_guide.md) | GitHub Actions CI/CD (lint, test, firmware build) |
 | [docs/design/integration_plan.md](docs/design/integration_plan.md) | Phase 3 hardware bring-up (8 stages) |
