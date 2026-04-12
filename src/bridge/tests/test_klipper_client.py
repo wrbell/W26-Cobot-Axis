@@ -392,7 +392,7 @@ class TestStepperConvenience:
         t.join(timeout=5)
 
         gcode = captured["params"]["script"]
-        assert gcode == "MANUAL_STEPPER STEPPER=pump MOVE=10.0000 SPEED=25.00 ACCEL=200.0"
+        assert gcode == "MANUAL_STEPPER STEPPER=pump MOVE=10.0000 SPEED=25.00 ACCEL=200.0 SYNC=0"
 
     def test_stepper_move_without_accel(self, klipper_client, fake_klippy):
         """stepper_move() without accel omits the ACCEL parameter."""
@@ -402,7 +402,7 @@ class TestStepperConvenience:
 
         gcode = captured["params"]["script"]
         assert "ACCEL" not in gcode
-        assert gcode == "MANUAL_STEPPER STEPPER=pump MOVE=5.0000 SPEED=10.00"
+        assert gcode == "MANUAL_STEPPER STEPPER=pump MOVE=5.0000 SPEED=10.00 SYNC=0"
 
     def test_stepper_move_negative_distance(self, klipper_client, fake_klippy):
         """stepper_move() handles negative distance (retract direction)."""
@@ -420,7 +420,7 @@ class TestStepperConvenience:
         t.join(timeout=5)
 
         gcode = captured["params"]["script"]
-        assert gcode == "MANUAL_STEPPER STEPPER=pump SET_POSITION=0.0000"
+        assert gcode == "MANUAL_STEPPER STEPPER=pump SET_POSITION=0.0000 SYNC=0"
 
     def test_stepper_set_position_nonzero(self, klipper_client, fake_klippy):
         """stepper_set_position() works with non-zero positions."""

@@ -150,12 +150,13 @@ class KlipperClient:
         cmd = f"MANUAL_STEPPER STEPPER={name} MOVE={distance:.4f} SPEED={speed:.2f}"
         if accel is not None:
             cmd += f" ACCEL={accel:.1f}"
+        cmd += " SYNC=0"
         return self.gcode(cmd)
 
     def stepper_set_position(self, name: str, position: float = 0.0) -> dict:
         """Reset the stepper's position reference."""
         return self.gcode(
-            f"MANUAL_STEPPER STEPPER={name} SET_POSITION={position:.4f}"
+            f"MANUAL_STEPPER STEPPER={name} SET_POSITION={position:.4f} SYNC=0"
         )
 
     def stepper_enable(self, name: str) -> dict:
