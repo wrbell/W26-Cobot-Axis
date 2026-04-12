@@ -360,10 +360,11 @@ KCONFIG
         echo ""
         echo "  Manual UF2 flash required:"
         echo "    1. Hold BOOTSEL on SKR Pico and plug in USB (or press RESET while holding BOOTSEL)"
-        echo "    2. sudo mount /dev/sda1 /mnt"
-        echo "    3. sudo cp $KLIPPER_DIR/out/klipper.uf2 /mnt/"
-        echo "    4. sudo sync && sudo umount /mnt"
-        echo "    5. The board reboots into Klipper automatically."
+        echo "    2. Find the USB drive: lsblk  (look for a ~128M disk, usually sda1)"
+        echo "    3. sudo mount /dev/sda1 /mnt  (adjust device if lsblk shows a different name)"
+        echo "    4. sudo cp $KLIPPER_DIR/out/klipper.uf2 /mnt/"
+        echo "    5. sudo sync && sudo umount /mnt"
+        echo "    6. The board reboots into Klipper automatically."
         echo ""
     fi
 

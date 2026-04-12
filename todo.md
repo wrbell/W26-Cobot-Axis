@@ -332,8 +332,8 @@ Software-complete milestone. All bridge code is written and tested (479 tests, 1
 
 #### Validation (no code changes — just run/review things)
 - [ ] **URSim smoke test** — spin up URSim Docker, connect bridge with `--dry-run`, verify RTDE register round-trip, mode transitions, e-stop. Proves the RTDE path works before touching real hardware.
-- [ ] **deploy.sh review** — read through deploy.sh, verify step order makes sense, no stale paths. Can't fully dry-run without Pi but review logic.
-- [ ] **printer.cfg review** — confirm pin assignments, TMC2209 UART addresses, motor defaults are sensible starting points (`rotation_distance` will need calibration on hardware).
+- [x] **deploy.sh review** — read through deploy.sh, verify step order makes sense, no stale paths. Can't fully dry-run without Pi but review logic.
+- [x] **printer.cfg review** — confirm pin assignments, TMC2209 UART addresses, motor defaults are sensible starting points (`rotation_distance` will need calibration on hardware).
 - [ ] **Release candidate tag** — push `v1.0.0-rc1`, verify release workflow fires: CI green, firmware .uf2 builds, GitHub Release created with artifacts.
 
 #### Release
