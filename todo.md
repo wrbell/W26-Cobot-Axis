@@ -334,7 +334,7 @@ Software-complete milestone. All bridge code is written and tested (479 tests, 1
 - [ ] **URSim smoke test** — spin up URSim Docker, connect bridge with `--dry-run`, verify RTDE register round-trip, mode transitions, e-stop. Proves the RTDE path works before touching real hardware.
 - [x] **deploy.sh review** — read through deploy.sh, verify step order makes sense, no stale paths. Can't fully dry-run without Pi but review logic.
 - [x] **printer.cfg review** — confirm pin assignments, TMC2209 UART addresses, motor defaults are sensible starting points (`rotation_distance` will need calibration on hardware).
-- [ ] **Release candidate tag** — push `v1.0.0-rc1`, verify release workflow fires: CI green, firmware .uf2 builds, GitHub Release created with artifacts.
+- [x] **Release candidate tag** — push `v1.0.0-rc1`, verify release workflow fires: CI green, firmware .uf2 builds, GitHub Release created with artifacts.
 
 #### Release
 - [ ] **Tag v1.0.0** — push tag, release workflow (`.github/workflows/release.yml`) creates GitHub Release with klipper.uf2 + PDFs. This is the "software-complete, ready for hardware" milestone.
@@ -479,7 +479,7 @@ Full guide: `docs/config_guide.md` — covers motor current, rotation distance, 
 
 ### Stage 7b: Slicer Integration (Week 11)
 
-- [ ] Wrap `src/provided/Mblack0.6mm.script` with `pump_on()`/`pump_off()` from `extrusion_control.script`
+- [x] Wrap `src/provided/Mblack0.6mm.script` with `pump_on()`/`pump_off()` from `extrusion_control.script` → `src/urscript/slicer_mblack06mm.script`
 - [ ] Load wrapped program onto UR30, run with bridge daemon active
 - [ ] Verify pump runs continuously during 776-waypoint path and stops cleanly at the end
 - [ ] Run calibration `test_calibration.script` Sub-test A (flow rate linearity) — determine optimal constant rate

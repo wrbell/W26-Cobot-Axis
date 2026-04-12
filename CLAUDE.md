@@ -114,6 +114,7 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | URScript extrusion program | `src/urscript/extrusion_control.script` |
 | URScript system validation test | `src/urscript/test_basic.script` |
 | URScript pump calibration test | `src/urscript/test_calibration.script` |
+| URScript wrapped slicer program | `src/urscript/slicer_mblack06mm.script` |
 | StallGuard shared header | `src/klipper_mods/stallguard_shared.h` |
 | StallGuard core1 firmware | `src/klipper_mods/core1_stallguard.c` |
 | StallGuard MCU commands | `src/klipper_mods/stallguard_command.c` |

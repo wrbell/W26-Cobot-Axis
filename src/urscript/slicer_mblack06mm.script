@@ -1,0 +1,1077 @@
+# W26 Cobot Axis — Wrapped Slicer Program (Mblack0.6mm)
+# Generated from src/provided/Mblack0.6mm.script
+# Wraps 776 slicer waypoints with pump_on/pump_off extrusion control
+#
+# Before running:
+#   - Bridge daemon must be connected and ready
+#   - Pump rate (EXTRUSION_RATE below) must be calibrated via test_calibration.script
+#   - Robot must be powered on and in remote control mode
+
+# ===================================================================
+# Extrusion control helpers (from extrusion_control.script)
+# ===================================================================
+
+# W26 Cobot Axis — URScript Extrusion Control Program
+# Runs on: UR30 teach pendant / controller
+# Purpose: Writes extrusion commands to RTDE output registers,
+#          reads stepper status from RTDE input registers.
+#
+# Register mapping (from docs/register_allocation.md):
+#
+# OUTPUT (UR30 → Pi, written here):
+#   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)
+#   output_double_register_0 = commanded extrusion rate (mm/s)
+#   output_double_register_1 = TCP speed magnitude (mm/s)
+#   output_bit_register_64   = extrusion enable
+#   output_bit_register_65   = emergency stop
+#   output_bit_register_66   = home stepper
+#
+# INPUT (Pi → UR30, read here):
+#   input_int_register_0     = stepper status (0=idle, 1=running, 2=error, 3=homing)
+#   input_int_register_1     = error code (0=none, 1=comms_lost, 2=stall, 3=thermal)
+#   input_double_register_0  = actual extrusion rate (mm/s)
+#   input_bit_register_64    = stepper ready
+#   input_bit_register_65    = stepper fault
+
+# ===================================================================
+# Configuration — adjust these for your application
+# ===================================================================
+MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
+
+# Speed-sync configuration (used by extrude_along_path only)
+EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
+ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
+
+# ===================================================================
+# Helper functions
+# ===================================================================
+
+def set_extrusion_mode(mode):
+    # mode: 0=off, 1=extrude, 2=retract
+    write_output_integer_register(0, mode)
+end
+
+def set_extrusion_rate(rate_mm_s):
+    # Clamp to safety limit
+    local clamped = rate_mm_s
+    if clamped > MAX_EXTRUSION_RATE:
+        clamped = MAX_EXTRUSION_RATE
+    end
+    write_output_float_register(0, clamped)
+end
+
+def set_extrusion_enable(enabled):
+    write_output_boolean_register(64, enabled)
+end
+
+def set_estop(active):
+    write_output_boolean_register(65, active)
+end
+
+def set_home_command(active):
+    write_output_boolean_register(66, active)
+end
+
+def update_tcp_speed():
+    # Write current TCP speed to output register for bridge daemon
+    local speed_vec = get_actual_tcp_speed()
+    local speed_mag = norm(speed_vec)
+    local speed_mm_s = speed_mag * 1000.0
+    write_output_float_register(1, speed_mm_s)
+    return speed_mm_s
+end
+
+def get_stepper_status():
+    return read_input_integer_register(0)
+end
+
+def get_stepper_error():
+    return read_input_integer_register(1)
+end
+
+def get_actual_extrusion_rate():
+    return read_input_float_register(0)
+end
+
+def is_stepper_ready():
+    return read_input_boolean_register(64)
+end
+
+def is_stepper_fault():
+    return read_input_boolean_register(65)
+end
+
+def get_stallguard_load():
+    # Read StallGuard load value from bridge daemon (0-255)
+    # Lower values = higher motor load, 0 = stall
+    return read_input_float_register(1)
+end
+
+def check_stallguard():
+    # Check StallGuard status: -1 = stall, 0 = warning, 1 = ok
+    local sg = get_stallguard_load()
+    if sg < 10:
+        return -1   # stall detected
+    elif sg < 30:
+        return 0    # warning: high load
+    else:
+        return 1    # ok
+    end
+end
+
+def wait_for_stepper_ready(timeout_s):
+    local t0 = 0.0
+    while is_stepper_ready() == False:
+        sync()
+        t0 = t0 + get_steptime()
+        if t0 > timeout_s:
+            popup("Stepper not ready — timeout", error=True)
+            return False
+        end
+    end
+    return True
+end
+
+# ===================================================================
+# Initialize — clear all registers
+# ===================================================================
+
+def init_registers():
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
+    set_extrusion_enable(False)
+    set_estop(False)
+    set_home_command(False)
+    write_output_float_register(1, 0.0)
+end
+
+# ===================================================================
+# Constant-rate extrusion control (primary API)
+# ===================================================================
+# These two functions are the main interface for slicer-generated
+# toolpaths. The pump runs at a fixed rate while the robot executes
+# a sequence of moves, then shuts off at the end.
+#
+# Usage pattern:
+#   init_registers()
+#   pump_on(RATE)
+#   mv(waypoint_1)    # slicer-generated moves
+#   mv(waypoint_2)
+#   ...
+#   pump_off()
+#   retract(2.0, 10.0)
+#   init_registers()
+
+def pump_on(rate_mm_s):
+    # Start constant-rate extrusion. Call once before a sequence of
+    # robot moves. Blocks until the stepper is ready (5s timeout).
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)   # extrude
+    set_extrusion_rate(rate_mm_s)
+
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_mode(0)
+        set_extrusion_enable(False)
+        popup("pump_on: stepper not ready", error=True)
+    end
+end
+
+def pump_off():
+    # Stop extrusion. Call after all robot moves are complete.
+    # Does NOT retract — call retract() separately if needed.
+    set_extrusion_mode(0)
+    set_extrusion_rate(0.0)
+    set_extrusion_enable(False)
+end
+
+def retract(distance_mm, speed_mm_s):
+    # Brief retraction to relieve pressure (anti-ooze)
+    set_extrusion_enable(True)
+    set_extrusion_mode(2)   # retract
+    set_extrusion_rate(speed_mm_s)
+
+    # Wait for the retraction to complete (approximate timing)
+    local retract_time = distance_mm / speed_mm_s
+    sleep(retract_time)
+
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+# ===================================================================
+# Advanced: Speed-synchronized extrusion
+# ===================================================================
+# Use extrude_along_path() when the extrusion rate must track TCP
+# speed in real time (e.g., variable-speed paths where bead width
+# must stay constant). For constant-velocity slicer output, prefer
+# pump_on/pump_off above.
+
+def extrude_along_path(target_pose, speed, accel):
+    # Enable extrusion system
+    set_extrusion_enable(True)
+    set_extrusion_mode(1)   # extrude
+
+    # Wait for stepper to be ready (5 second timeout)
+    if wait_for_stepper_ready(5.0) == False:
+        set_extrusion_enable(False)
+        return
+    end
+
+    # Start robot motion
+    movel(target_pose, a=accel, v=speed)
+
+    # Synchronize extrusion with robot speed
+    while is_steady() == False:
+        local tcp_speed = update_tcp_speed()
+
+        if ENABLE_SPEED_SYNC:
+            local rate = tcp_speed * EXTRUSION_MULTIPLIER
+            set_extrusion_rate(rate)
+        end
+
+        # Check for stepper faults (including StallGuard)
+        if is_stepper_fault():
+            local err = get_stepper_error()
+            local sg_status = check_stallguard()
+            if sg_status == -1:
+                popup("Pump stall detected (StallGuard)", error=True)
+            else:
+                popup(str_cat("Stepper fault: error code ", err), error=True)
+            end
+            stopl(2.0)   # decelerate robot to stop
+            break
+        end
+
+        sync()
+    end
+
+    # Stop extrusion
+    set_extrusion_mode(0)
+    set_extrusion_enable(False)
+end
+
+
+# ===================================================================
+# Slicer configuration
+# ===================================================================
+EXTRUSION_RATE = 10.0   # mm/s constant pump rate — calibrate via test_calibration.script
+RETRACT_DISTANCE = 2.0  # mm retraction after path completes
+RETRACT_SPEED = 10.0    # mm/s retraction speed
+
+# ===================================================================
+# mv() helper (from slicer output)
+# ===================================================================
+def mv(pose):
+	movel(pose, a=1.2000, v=0.0600)
+end
+
+# ===================================================================
+# Main program
+# ===================================================================
+
+# Initialize RTDE registers
+init_registers()
+
+# Move to start pose (joint move — no extrusion)
+movej([0.4627, -0.0353, 1.1441, -2.6719, -1.5626, -2.1283], a=1.2000, v=0.0600)
+
+# Capture base TCP pose for relative waypoints
+base_pose = get_actual_tcp_pose()
+
+# Home the stepper
+set_home_command(True)
+sync()
+set_home_command(False)
+sleep(1.0)
+
+# Start pump at constant rate
+pump_on(EXTRUSION_RATE)
+
+# --- Slicer-generated waypoints (776 moves) ---
+mv(pose_add(base_pose, p[0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0191, -0.0110, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0245, -0.0036, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0572, -0.0224, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0534, -0.0308, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0725, -0.0419, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0940, -0.0045, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0750, 0.0065, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0695, -0.0016, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0476, 0.0117, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0884, 0.0171, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0723, 0.0547, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0949, 0.0429, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0908, 0.0339, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1099, 0.0229, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1314, 0.0602, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1124, 0.0713, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1069, 0.0638, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0742, 0.0827, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0780, 0.0911, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0710, 0.0952, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0590, 0.1021, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0420, 0.0727, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0585, 0.0342, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0571, 0.0337, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0335, -0.0070, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0317, -0.0060, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0539, 0.0324, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0513, 0.0321, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0300, -0.0050, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0282, -0.0039, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0488, 0.0318, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0462, 0.0314, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0264, -0.0029, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0243, -0.0023, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0436, 0.0311, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0411, 0.0308, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0182, -0.0088, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0164, -0.0077, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0385, 0.0305, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0359, 0.0302, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0146, -0.0067, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0128, -0.0057, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0333, 0.0299, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0308, 0.0295, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0111, -0.0046, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0093, -0.0036, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0282, 0.0292, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0256, 0.0289, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0075, -0.0026, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0057, -0.0015, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0231, 0.0286, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0205, 0.0283, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0039, -0.0005, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0021, 0.0006, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0185, 0.0289, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0600, 0.1008, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0437, 0.0726, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0447, 0.0702, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0613, 0.0990, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0631, 0.0979, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0457, 0.0678, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0467, 0.0655, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0649, 0.0969, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0667, 0.0959, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0477, 0.0631, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0488, 0.0607, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0685, 0.0948, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0703, 0.0938, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0498, 0.0583, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0508, 0.0559, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0721, 0.0928, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0738, 0.0917, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0518, 0.0535, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0528, 0.0511, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0759, 0.0905, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0724, 0.0843, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0730, 0.0820, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0538, 0.0488, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0548, 0.0464, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0746, 0.0807, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0764, 0.0797, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0558, 0.0440, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0568, 0.0416, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0782, 0.0787, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0800, 0.0776, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0578, 0.0392, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0589, 0.0368, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0818, 0.0766, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0836, 0.0756, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0353, -0.0081, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0371, -0.0091, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0480, 0.0098, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0498, 0.0087, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0389, -0.0101, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0407, -0.0112, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0515, 0.0076, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0533, 0.0066, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0425, -0.0122, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0443, -0.0132, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0551, 0.0055, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0568, 0.0044, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0461, -0.0143, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0479, -0.0153, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0586, 0.0033, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0604, 0.0022, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0496, -0.0163, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0514, -0.0174, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0621, 0.0011, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0639, 0.0001, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0532, -0.0184, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0550, -0.0194, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0656, -0.0010, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0674, -0.0021, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0568, -0.0205, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0584, -0.0218, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0693, -0.0029, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0716, -0.0024, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0758, 0.0042, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0558, -0.0305, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0576, -0.0315, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0776, 0.0032, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0794, 0.0022, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0594, -0.0325, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0612, -0.0336, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0812, 0.0011, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0830, 0.0001, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0630, -0.0346, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0648, -0.0356, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0848, -0.0009, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0866, -0.0020, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0666, -0.0367, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0683, -0.0377, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0884, -0.0030, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0902, -0.0040, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0701, -0.0387, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0719, -0.0398, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0924, -0.0043, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0913, -0.0053, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0708, -0.0047, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0452, 0.0101, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0461, 0.0145, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0845, 0.0209, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0858, 0.0215, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0838, 0.0181, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0813, 0.0178, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0842, 0.0229, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0832, 0.0253, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0787, 0.0175, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0762, 0.0173, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0822, 0.0277, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0812, 0.0301, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0736, 0.0170, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0711, 0.0167, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0802, 0.0325, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0792, 0.0349, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0685, 0.0164, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0660, 0.0161, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0782, 0.0373, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0772, 0.0397, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0634, 0.0158, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0609, 0.0156, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0762, 0.0421, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0752, 0.0445, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0583, 0.0153, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0558, 0.0150, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0742, 0.0469, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0732, 0.0493, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0532, 0.0147, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0507, 0.0144, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0728, 0.0527, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0708, 0.0518, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0695, 0.0549, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0728, 0.0579, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0751, 0.0566, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0743, 0.0554, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0854, 0.0745, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0872, 0.0735, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0766, 0.0551, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0784, 0.0541, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0890, 0.0724, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0908, 0.0714, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0802, 0.0531, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0820, 0.0520, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0925, 0.0704, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0943, 0.0693, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0837, 0.0510, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0855, 0.0500, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0961, 0.0683, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0979, 0.0673, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0873, 0.0489, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0891, 0.0479, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0997, 0.0662, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1015, 0.0652, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0909, 0.0469, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0927, 0.0459, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1033, 0.0642, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1051, 0.0631, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0945, 0.0448, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0961, 0.0435, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1071, 0.0625, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1092, 0.0628, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1132, 0.0690, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0932, 0.0343, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0950, 0.0333, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1150, 0.0680, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1168, 0.0669, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0968, 0.0322, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0986, 0.0312, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1186, 0.0659, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1204, 0.0649, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1004, 0.0302, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1022, 0.0291, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1222, 0.0638, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1240, 0.0628, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1040, 0.0281, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1057, 0.0271, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1258, 0.0618, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1276, 0.0607, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1075, 0.0260, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1093, 0.0250, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1298, 0.0605, 0.0000, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1298, 0.0605, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1301, 0.0610, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1124, 0.0712, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1069, 0.0638, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0741, 0.0827, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0779, 0.0911, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0709, 0.0951, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0590, 0.1020, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0421, 0.0727, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0587, 0.0339, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0170, 0.0293, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0001, 0.0000, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0190, -0.0109, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0246, -0.0035, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0573, -0.0224, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0535, -0.0308, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0725, -0.0418, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0939, -0.0046, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0750, 0.0064, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0695, -0.0017, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0475, 0.0117, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0883, 0.0171, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0723, 0.0548, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0950, 0.0428, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0909, 0.0340, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1099, 0.0230, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1313, 0.0602, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1303, 0.0608, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0721, -0.0403, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0550, -0.0304, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0551, -0.0303, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0553, -0.0302, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0554, -0.0301, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0555, -0.0299, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0556, -0.0298, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0558, -0.0297, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0559, -0.0296, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0560, -0.0295, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0562, -0.0294, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0724, -0.0386, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0735, -0.0367, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0574, -0.0274, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0585, -0.0255, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0746, -0.0348, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0743, -0.0347, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0607, -0.0222, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0229, -0.0003, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0027, 0.0007, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0031, 0.0014, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0029, 0.0016, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0190, -0.0079, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0189, -0.0081, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0189, -0.0082, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0189, -0.0084, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0188, -0.0086, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0188, -0.0087, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0188, -0.0089, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0187, -0.0091, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0187, -0.0092, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0186, -0.0094, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0016, 0.0004, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0040, 0.0035, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0201, -0.0058, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0212, -0.0040, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0051, 0.0054, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0062, 0.0073, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0245, -0.0027, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0580, -0.0219, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0581, -0.0221, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0582, -0.0222, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0583, -0.0223, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0584, -0.0225, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0585, -0.0226, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0586, -0.0227, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0587, -0.0229, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0588, -0.0230, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0589, -0.0231, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0757, -0.0329, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0768, -0.0310, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0073, 0.0091, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0084, 0.0110, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0779, -0.0291, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0790, -0.0272, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0094, 0.0129, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0105, 0.0148, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0801, -0.0253, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0812, -0.0234, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0116, 0.0167, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0127, 0.0186, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0823, -0.0215, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0833, -0.0196, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0138, 0.0205, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0149, 0.0224, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0844, -0.0177, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0855, -0.0159, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0160, 0.0243, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0171, 0.0262, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0866, -0.0140, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0877, -0.0121, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0711, -0.0026, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0709, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0708, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0706, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0704, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0703, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0701, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0699, -0.0025, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0698, -0.0024, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0696, -0.0024, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0474, 0.0107, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0186, 0.0278, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0222, 0.0283, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0475, 0.0137, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0515, 0.0138, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0514, 0.0140, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0513, 0.0141, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0512, 0.0141, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0511, 0.0142, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0510, 0.0142, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0509, 0.0143, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0507, 0.0143, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0506, 0.0144, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0505, 0.0145, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0504, 0.0145, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0258, 0.0287, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0294, 0.0292, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0540, 0.0150, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0576, 0.0154, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0330, 0.0296, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0366, 0.0301, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0613, 0.0158, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0650, 0.0162, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0401, 0.0305, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0437, 0.0310, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0686, 0.0166, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0723, 0.0170, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0473, 0.0314, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0509, 0.0319, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0760, 0.0174, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0797, 0.0178, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0545, 0.0323, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0581, 0.0328, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0833, 0.0182, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0866, 0.0182, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0865, 0.0184, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0864, 0.0185, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0863, 0.0186, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0862, 0.0187, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0861, 0.0188, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0860, 0.0190, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0858, 0.0191, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0857, 0.0192, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0856, 0.0193, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0855, 0.0194, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0600, 0.0342, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0599, 0.0343, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0598, 0.0344, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0597, 0.0345, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0596, 0.0345, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0595, 0.0346, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0594, 0.0347, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0592, 0.0348, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0591, 0.0349, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0590, 0.0350, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0591, 0.0348, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0587, 0.0375, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0839, 0.0229, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0824, 0.0263, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0573, 0.0408, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0559, 0.0441, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0809, 0.0297, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0794, 0.0331, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0545, 0.0475, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0531, 0.0508, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0779, 0.0365, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0764, 0.0399, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0517, 0.0542, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0503, 0.0575, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0749, 0.0433, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0734, 0.0467, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0489, 0.0608, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0475, 0.0642, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0719, 0.0500, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0706, 0.0533, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0461, 0.0675, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0447, 0.0708, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0710, 0.0556, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0737, 0.0566, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0443, 0.0734, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0442, 0.0733, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0441, 0.0733, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0440, 0.0732, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0439, 0.0731, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0438, 0.0730, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0437, 0.0729, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0436, 0.0728, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0435, 0.0728, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0434, 0.0727, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0433, 0.0729, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0443, 0.0724, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1085, 0.0606, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1287, 0.0595, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1093, 0.0260, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1096, 0.0258, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0933, 0.0350, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0932, 0.0349, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0930, 0.0349, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0929, 0.0348, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0928, 0.0347, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0926, 0.0346, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0925, 0.0345, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0923, 0.0344, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0922, 0.0344, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0921, 0.0343, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1096, 0.0242, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1107, 0.0277, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0945, 0.0370, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0956, 0.0389, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1118, 0.0296, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1129, 0.0315, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0967, 0.0408, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1139, 0.0334, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0961, 0.0437, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0959, 0.0438, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0957, 0.0440, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0955, 0.0441, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0953, 0.0443, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0951, 0.0444, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0949, 0.0446, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0947, 0.0447, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0755, 0.0558, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0455, 0.0754, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1150, 0.0353, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1161, 0.0371, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0466, 0.0773, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0477, 0.0792, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1172, 0.0390, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1183, 0.0409, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0488, 0.0811, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0499, 0.0830, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1194, 0.0428, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1205, 0.0447, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0510, 0.0849, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0521, 0.0868, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1216, 0.0466, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1227, 0.0485, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0532, 0.0886, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0542, 0.0905, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1238, 0.0504, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1249, 0.0523, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1057, 0.0630, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0743, 0.0811, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0742, 0.0812, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0740, 0.0813, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0739, 0.0815, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0737, 0.0816, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0736, 0.0817, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0734, 0.0818, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0733, 0.0819, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0732, 0.0821, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0730, 0.0822, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0553, 0.0924, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0564, 0.0943, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0726, 0.0850, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0737, 0.0869, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0575, 0.0962, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0586, 0.0981, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0749, 0.0891, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0751, 0.0894, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0753, 0.0897, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0755, 0.0899, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0757, 0.0902, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0759, 0.0905, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0595, 0.0999, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0629, 0.0975, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0707, 0.0824, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1085, 0.0606, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1101, 0.0633, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1098, 0.0635, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1260, 0.0542, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1271, 0.0561, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1109, 0.0654, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1120, 0.0673, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1283, 0.0582, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1285, 0.0585, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1287, 0.0588, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1289, 0.0591, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1291, 0.0594, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1293, 0.0597, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1129, 0.0691, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1131, 0.0685, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0984, 0.0431, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0728, 0.0579, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0695, 0.0549, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0577, 0.0157, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0461, 0.0145, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0452, 0.0101, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0708, -0.0047, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0729, -0.0010, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0727, -0.0009, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0888, -0.0102, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0899, -0.0083, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0738, 0.0010, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0749, 0.0029, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0911, -0.0063, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0912, -0.0061, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0914, -0.0060, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0915, -0.0058, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0916, -0.0057, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0917, -0.0056, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0919, -0.0054, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0920, -0.0053, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0921, -0.0052, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0922, -0.0050, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0754, 0.0047, 0.0006, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0754, 0.0047, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0761, 0.0058, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0750, 0.0064, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0695, -0.0017, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0475, 0.0117, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0883, 0.0171, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0723, 0.0548, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0950, 0.0428, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0909, 0.0340, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1099, 0.0230, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1313, 0.0602, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1124, 0.0712, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1069, 0.0638, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0741, 0.0827, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0779, 0.0911, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0709, 0.0951, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0590, 0.1020, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0421, 0.0727, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0587, 0.0339, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0170, 0.0293, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0001, 0.0000, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0190, -0.0109, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0246, -0.0035, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0573, -0.0224, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0535, -0.0308, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0725, -0.0418, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0939, -0.0046, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0763, 0.0056, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0758, 0.0034, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0709, -0.0050, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0449, 0.0100, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0459, 0.0147, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0851, 0.0190, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0848, 0.0197, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0861, 0.0203, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0850, 0.0183, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0825, 0.0180, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0846, 0.0216, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0836, 0.0238, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0801, 0.0178, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0777, 0.0175, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0827, 0.0261, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0817, 0.0283, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0753, 0.0172, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0729, 0.0169, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0807, 0.0305, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0797, 0.0327, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0704, 0.0167, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0680, 0.0164, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0787, 0.0350, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0777, 0.0372, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0656, 0.0161, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0632, 0.0159, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0768, 0.0394, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0758, 0.0416, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0607, 0.0156, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0583, 0.0153, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0748, 0.0439, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0738, 0.0461, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0559, 0.0151, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0535, 0.0148, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0728, 0.0483, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0718, 0.0505, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0505, 0.0136, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0503, 0.0152, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0459, 0.0147, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0449, 0.0100, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0475, 0.0085, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0487, 0.0105, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0374, -0.0092, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0391, -0.0102, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0500, 0.0087, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0516, 0.0077, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0408, -0.0111, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0425, -0.0121, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0533, 0.0067, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0550, 0.0056, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0442, -0.0131, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0459, -0.0141, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0567, 0.0046, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0583, 0.0036, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0476, -0.0151, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0493, -0.0161, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0600, 0.0025, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0617, 0.0015, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0510, -0.0170, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0527, -0.0180, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0633, 0.0005, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0650, -0.0006, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0544, -0.0190, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0561, -0.0200, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0667, -0.0016, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0683, -0.0027, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0578, -0.0210, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0588, -0.0231, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0706, -0.0027, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0755, 0.0043, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0766, 0.0037, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0566, -0.0308, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0583, -0.0318, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0783, 0.0028, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0800, 0.0018, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0600, -0.0328, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0617, -0.0338, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0817, 0.0008, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0834, -0.0002, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0634, -0.0348, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0651, -0.0358, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0851, -0.0012, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0868, -0.0022, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0668, -0.0367, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0685, -0.0377, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0885, -0.0031, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0902, -0.0041, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0702, -0.0387, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0719, -0.0397, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0923, -0.0043, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1297, 0.0604, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1093, 0.0251, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1076, 0.0261, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1276, 0.0607, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1259, 0.0616, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1059, 0.0271, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1042, 0.0280, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1242, 0.0626, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1225, 0.0636, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1025, 0.0290, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1008, 0.0300, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1208, 0.0646, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1191, 0.0656, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0991, 0.0310, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0974, 0.0320, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1174, 0.0665, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1157, 0.0675, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0957, 0.0330, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0940, 0.0339, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1140, 0.0685, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1129, 0.0691, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1083, 0.0627, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0965, 0.0423, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0955, 0.0443, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1060, 0.0626, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1043, 0.0635, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0938, 0.0453, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0921, 0.0463, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1026, 0.0645, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.1009, 0.0655, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0904, 0.0473, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0887, 0.0482, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0992, 0.0665, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0975, 0.0675, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0870, 0.0492, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0853, 0.0502, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0958, 0.0684, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0941, 0.0694, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0836, 0.0512, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0819, 0.0522, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0924, 0.0704, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0907, 0.0714, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0801, 0.0531, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0784, 0.0541, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0890, 0.0724, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0873, 0.0733, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0767, 0.0551, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0750, 0.0561, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0856, 0.0743, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0839, 0.0753, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0729, 0.0563, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0712, 0.0560, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0709, 0.0528, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0357, -0.0082, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0340, -0.0072, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0571, 0.0328, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0546, 0.0325, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0323, -0.0062, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0306, -0.0052, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0522, 0.0322, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0497, 0.0319, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0289, -0.0043, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0272, -0.0033, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0473, 0.0316, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0448, 0.0313, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0255, -0.0023, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0231, -0.0024, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0424, 0.0309, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0399, 0.0306, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0175, -0.0083, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0158, -0.0073, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0375, 0.0303, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0351, 0.0300, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0141, -0.0063, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0124, -0.0053, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0326, 0.0297, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0302, 0.0294, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0107, -0.0043, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0090, -0.0034, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0277, 0.0291, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0253, 0.0288, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0073, -0.0024, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0056, -0.0014, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0228, 0.0285, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0204, 0.0282, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0039, -0.0004, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0022, 0.0006, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0185, 0.0288, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0432, 0.0717, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0595, 0.0999, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0612, 0.0989, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0447, 0.0703, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0457, 0.0681, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0629, 0.0980, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0646, 0.0970, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0466, 0.0658, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0476, 0.0635, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0663, 0.0960, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0680, 0.0950, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0486, 0.0613, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0495, 0.0590, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0697, 0.0940, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0714, 0.0931, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0505, 0.0567, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0514, 0.0545, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0731, 0.0921, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0748, 0.0911, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0524, 0.0522, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0533, 0.0499, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0726, 0.0833, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0737, 0.0812, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0543, 0.0476, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0553, 0.0454, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0754, 0.0802, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0771, 0.0792, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0562, 0.0431, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0572, 0.0408, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0788, 0.0782, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0805, 0.0773, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0581, 0.0386, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0591, 0.0363, 0.0009, 0.0000, 0.0000, 0.0000]))
+mv(pose_add(base_pose, p[0.0826, 0.0770, 0.0009, 0.0000, 0.0000, 0.0000]))
+
+# --- End of slicer waypoints ---
+
+# Stop pump
+pump_off()
+
+# Retract to relieve nozzle pressure
+retract(RETRACT_DISTANCE, RETRACT_SPEED)
+
+# Cleanup
+init_registers()
