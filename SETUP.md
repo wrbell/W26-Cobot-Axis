@@ -195,10 +195,10 @@ SSH into the Pi and clone the project repository:
 ```bash
 ssh pi@w26-pi.local
 cd ~
-git clone <repository-url> W26-Cobot-Axis
+git clone https://github.com/wrbell/W26-Cobot-Axis.git W26-Cobot-Axis
 ```
 
-Replace `<repository-url>` with the actual URL. If the repository is private, use SSH keys or HTTPS with a personal access token.
+If the repository is private, use SSH keys or HTTPS with a personal access token instead.
 
 ### Verification Checkpoint
 
@@ -216,6 +216,8 @@ Connect the SKR Pico V1.0 to the Pi via its USB-C port.
 ### First-Time Flash (Board Has Never Run Klipper)
 
 The SKR Pico ships with no firmware or with a default bootloader. The first flash must use the UF2 method via the RP2040's built-in USB mass storage bootloader.
+
+> **Shortcut:** Pre-built `klipper.uf2` firmware is available from the [latest GitHub Release](https://github.com/wrbell/W26-Cobot-Axis/releases). Download it and skip to step 2 below.
 
 **1. Build the firmware:**
 
@@ -252,7 +254,9 @@ This produces `~/klipper/out/klipper.uf2`.
 **3. Flash the firmware:**
 
 ```bash
-sudo mount /dev/sda1 /mnt
+# Find the USB drive (look for a ~128M disk, usually sda1)
+lsblk
+sudo mount /dev/sda1 /mnt    # adjust device if lsblk shows a different name
 sudo cp ~/klipper/out/klipper.uf2 /mnt/
 sudo sync
 sudo umount /mnt
