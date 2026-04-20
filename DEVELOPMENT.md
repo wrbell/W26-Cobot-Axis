@@ -96,15 +96,15 @@ python -m pytest src/bridge/tests/ -v -s
 
 | File | Tests | What it covers |
 |------|-------|----------------|
-| `test_bridge_daemon.py` | 71 | Main loop, mode switching, e-stop, reconnection |
-| `test_rtde_client.py` | 43 | RTDE read/write, stub fallback, timeouts |
-| `test_klipper_client.py` | 42 | Unix socket client, G-code send/receive |
-| `test_extrusion_profile.py` | 39 | Linear/polynomial/lookup speed profiles |
+| `test_bridge_daemon.py` | 156 | Main loop, mode switching, e-stop, reconnection |
+| `test_stallguard.py` | 49 | StallGuard status integration |
+| `test_extrusion_profile.py` | 46 | Linear/polynomial/lookup speed profiles |
+| `test_klipper_client.py` | 44 | Unix socket client, G-code send/receive |
+| `test_rtde_client.py` | 44 | RTDE read/write, stub fallback, timeouts |
+| `test_dashboard_client.py` | 38 | UR Dashboard Server client |
 | `test_stallguard_accumulator.py` | 34 | StallGuard history buffer, CSV dump |
-| `test_stallguard.py` | 25 | StallGuard status integration |
-| `test_dashboard_client.py` | 25 | UR Dashboard Server client |
+| `test_data_logger.py` | 29 | CSV logging with rotation |
 | `test_config.py` | 24 | Register naming, uniqueness, constant sanity |
-| `test_data_logger.py` | 17 | CSV logging with rotation |
 | `test_watchdog.py` | 15 | RTDE timestamp-based stale detection |
 
 ---

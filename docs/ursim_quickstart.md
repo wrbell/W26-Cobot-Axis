@@ -153,13 +153,18 @@ While the bridge is running in dry-run mode, go to the noVNC teach pendant (http
 
 ### Quick Register Test from Python
 
-In a separate terminal, run this test script to verify register read/write independently:
+In a separate terminal, run this test script to verify register read/write independently. Save it as `test_ursim_rtde.py` on the Windows host (URSim binds its RTDE server to `127.0.0.1` inside the container; with the `-p 30004:30004` port mapping, `127.0.0.1` on the host also works). Install `ur_rtde` first if you do not have it:
+
+```bash
+pip install ur_rtde     # or see DEVELOPMENT.md for the macOS/Linux build notes
+python test_ursim_rtde.py
+```
 
 ```python
 # test_ursim_rtde.py — standalone RTDE connectivity test
 import rtde_receive
 import rtde_control
-import time
+import time  # reserved for future timing loops
 
 HOST = "127.0.0.1"
 

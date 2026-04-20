@@ -374,6 +374,8 @@ The following amendments add StallGuard overlay work to the existing integration
 | Core1 updates shared SRAM | `stallguard_query` shows `stall_active: true`, `stall_count` increments | `stall_active` stays false |
 | Detection latency (DIAG to RTDE) < 100 ms | All 10 measurements below 100 ms | Any measurement > 100 ms |
 | Detection latency mean < 70 ms | Mean of 10 trials < 70 ms | Mean exceeds 70 ms |
+
+> **Why 100 ms?** The stallguard_monitor polls Klipper's shared SRAM at **50 ms** intervals (`poll_interval: 0.05`, printer.cfg line 58), the bridge main loop runs at **125 Hz = 8 ms**, and the RTDE output is written once per cycle. Worst-case serial/scheduling tail adds ~30-40 ms. Budget: 50 + 8 + 42 margin = **100 ms** cap, ~58 ms mean (half poll + one bridge cycle + margin). This is the bridge-only path from DIAG assertion to UR register update; compare with **TP-02** in `test_procedures.md`, which measures end-to-end UR-command-to-motor-motion latency with a P95 target of 20 ms over a different path.
 | No false positives at chosen threshold | 30-second run at all speeds (5--50 mm/s) with zero false `stall_active` assertions | Any false trigger |
 | Hardware path takes priority over UART | Bridge log shows hardware stall detected before UART-polled stall | UART stall detected first |
 | UR30 receives ERR_STALL + fault flag | Teach pendant shows `error_code = 2`, `fault = True` | Registers not updated |

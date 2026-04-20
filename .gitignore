@@ -8,6 +8,12 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
 # macOS
 .DS_Store
 

@@ -629,7 +629,8 @@ The recommended service startup order is:
 
 If using systemd, configure `After=klipper.service` for both Moonraker and
 the bridge daemon. Moonraker's install script already sets this up. The bridge
-daemon's systemd unit (TODO: `src/deploy/bridge.service`) should do the same.
+daemon's systemd unit is at `src/systemd/w26-bridge.service` and declares
+`After=klipper.service network.target`.
 
 ---
 

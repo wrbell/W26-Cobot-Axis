@@ -45,8 +45,11 @@ pushes, you will not come close to the 2,000-minute limit on a private repo.
 - The two workflow files committed and pushed:
   - `.github/workflows/ci.yml` (Tier 1)
   - `.github/workflows/firmware.yml` (Tier 2)
-- That is it. No secrets, tokens, or external services are needed for Tier 1
-  and Tier 2.
+- **Optional:** `CODECOV_TOKEN` repository secret to enable coverage uploads to
+  codecov.io. The workflow sets `fail_ci_if_error: false`, so CI passes even if
+  the token is missing -- coverage upload simply becomes a no-op. To enable:
+  sign up at codecov.io, link the repo, and add the token at
+  Settings → Secrets and variables → Actions → `CODECOV_TOKEN`.
 
 ---
 
@@ -69,7 +72,7 @@ fast. Tier 2 runs only when firmware source changes and is slower.
 | Setup Python | `actions/setup-python@v5` (3.11) | Install Python 3.11 |
 | Install deps | `pip install ruff pytest ur_rtde` | Install linter, test runner, and RTDE library |
 | Lint | `ruff check src/bridge/` | Static analysis of all Python bridge code |
-| Test | `python -m pytest src/bridge/tests/ -v` | Run 277+ unit tests (all mocked, no hardware needed) |
+| Test | `python -m pytest src/bridge/tests/ -v` | Run 479 unit tests (all mocked, no hardware needed) |
 | ShellCheck | `shellcheck deploy.sh scripts/dev-sync.sh` | Lint the two Bash scripts for common shell bugs |
 
 The steps run sequentially in a single job on `ubuntu-latest`. If any step
@@ -573,13 +576,14 @@ lines that our `sed` commands rely on.
 5. If the anchor lines changed, update the `sed` commands in both
    `.github/workflows/firmware.yml` and `deploy.sh` to match.
 
-The anchor lines we depend on (as of the time of writing):
+The anchor lines we depend on (as of the time of writing, relative to the
+Klipper source tree -- i.e. `vendor/klipper/` locally or `klipper/` in CI):
 
 | File | Anchor line | What we patch |
 |------|------------|---------------|
-| `src/rp2040/Makefile` | `rp2040/i2c.c` (last `src-y` entry) | Append our two `src-y +=` lines after it |
-| `src/rp2040/main.c` | `#include "sched.h"` | Insert `extern void core1_launch(void);` after it |
-| `src/rp2040/main.c` | `sched_main();` | Insert `core1_launch();` before it |
+| `klipper/src/rp2040/Makefile` | `rp2040/i2c.c` (last `src-y` entry) | Append our two `src-y +=` lines after it |
+| `klipper/src/rp2040/main.c` | `#include "sched.h"` | Insert `extern void core1_launch(void);` after it |
+| `klipper/src/rp2040/main.c` | `sched_main();` | Insert `core1_launch();` before it |
 
 ### Firmware build fails with `.config` errors
 
