@@ -54,6 +54,51 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 
 ---
 
+## Documentation
+
+**Start here by role:**
+
+- **First-time Pi setup (fresh OS → running system)** → [SETUP.md](SETUP.md)
+- **Local development (no hardware needed)** → [DEVELOPMENT.md](DEVELOPMENT.md)
+- **Dev bench bring-up (Pi + SKR Pico + URSim)** → [docs/dev_bench_guide.md](docs/dev_bench_guide.md)
+- **Hardware calibration & tuning** → [docs/config_guide.md](docs/config_guide.md)
+- **Phase 3 hardware integration (8 staged procedure)** → [docs/design/integration_plan.md](docs/design/integration_plan.md)
+
+**Testing & validation:**
+
+- [docs/design/testing_strategy.md](docs/design/testing_strategy.md) — unit / integration / HITL tier architecture
+- [docs/design/test_procedures.md](docs/design/test_procedures.md) — formal acceptance tests (TP-01 … TP-05)
+- [docs/design/hitl_plan.md](docs/design/hitl_plan.md) — StallGuard + URSim hardware-in-the-loop plan
+- [docs/ursim_quickstart.md](docs/ursim_quickstart.md) — URSim Docker runbook
+- [src/urscript/test_basic.script](src/urscript/test_basic.script) — on-robot validation (sub-tests A–I)
+- [src/urscript/test_calibration.script](src/urscript/test_calibration.script) — pump flow characterization
+
+**CI/CD & deployment:**
+
+- [docs/design/ci_cd_guide.md](docs/design/ci_cd_guide.md) — GitHub Actions Tier 1 / Tier 2 workflows
+- [deploy.sh](deploy.sh) — idempotent Pi deployment script
+- [scripts/dev-sync.sh](scripts/dev-sync.sh) — fast iterative rsync for the dev bench
+
+**Hardware reference:**
+
+- [docs/skr_pico_specs.md](docs/skr_pico_specs.md) — SKR Pico V1.0 pinout, TMC2209, StallGuard
+- [docs/skr_pico_klipper_setup.md](docs/skr_pico_klipper_setup.md) — Klipper on the SKR Pico
+- [docs/pi_power.md](docs/pi_power.md) — 24 V power distribution, buck converter selection
+- [docs/klipper_protocols.md](docs/klipper_protocols.md) — Klipper host API & MCU protocol
+- [docs/ur_rtde.md](docs/ur_rtde.md) — UR30 RTDE protocol & the `ur_rtde` library
+
+**Design & analysis:**
+
+- [docs/design_specification.md](docs/design_specification.md) — 25 formal requirements
+- [docs/problem_analysis.md](docs/problem_analysis.md) — Bolton Step 2 problem analysis
+- [docs/latency_analysis.md](docs/latency_analysis.md) — end-to-end latency budget
+- [docs/register_allocation.md](docs/register_allocation.md) — RTDE register map
+- [docs/design/stepper_driving.md](docs/design/stepper_driving.md) — consolidated stepper design
+- [docs/phase2/memo_draft.md](docs/phase2/memo_draft.md) — Phase 2 memo (full text + tables)
+- [trades/](trades/) — trade studies (comms, MCU, Klipper vs Lingua Franca)
+
+---
+
 ## Current Progress (as of Feb 24, 2026 — Week 8)
 
 ### Status Summary

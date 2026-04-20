@@ -52,7 +52,7 @@ What data/information we **don't currently have** but need to complete each Phas
 | Need | What Specifically | Source |
 |------|-------------------|--------|
 | Buck converter selection | We recommend Pololu D24V22F5 but haven't confirmed. Need: one or two units? Pi400 is optional, so maybe just one for the headless Pi. | **Design decision** |
-| UR30 power block pinout | Which pins/terminals on the UR30 controller provide 24V, and how to physically connect (screw terminal? connector type?) | **UR30 User Manual** (`docs/`) — look up tool connector and controller I/O pinout |
+| UR30 power block pinout | Which pins/terminals on the UR30 controller provide 24V, and how to physically connect (screw terminal? connector type?) | **UR30 User Manual** ([download](https://www.universal-robots.com/download/manuals-e-series/user/ur30/)) — look up tool connector and controller I/O pinout |
 | UR30 ethernet port location | Which ethernet port on the UR30 controller is available for RTDE? Is it shared with the teach pendant? | **UR30 User Manual** or **test in lab** |
 | Cable lengths needed | Distance from UR30 controller to Pi, Pi to SKR Pico, SKR Pico to motor. Affects wire gauge and voltage drop. | **Measure in lab** |
 | Connector types | What connectors does the UR30 power block use? SKR Pico uses screw terminals for VIN. | UR30 Manual + `docs/skr_pico_specs.md` |

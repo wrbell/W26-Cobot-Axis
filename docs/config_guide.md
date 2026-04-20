@@ -174,7 +174,17 @@ After running `test_calibration.script` Sub-test A:
 STALLGUARD_THRESHOLD = 10    # sg_result below this = stall
 ```
 
-Too low = false stall detections. Too high = missed real stalls. Tune after hardware testing with the motor under load.
+The TMC2209 reports `sg_result` in the range 0–510 under healthy conditions. Stalls cause it to drop toward zero. Raise `STALLGUARD_THRESHOLD` to make detection **more sensitive** (trips on smaller load drops); lower it to tolerate bigger momentary dips.
+
+**Typical starting points** (tune per `docs/design/hitl_plan.md` Stage 4 Amendment):
+
+| Condition | Starting `STALLGUARD_THRESHOLD` |
+|-----------|-------------------------------|
+| Very conservative (only catch hard stalls) | 5–15 |
+| Typical NEMA17 + light paste load | 20–50 |
+| Aggressive (catches partial blockages) | 50–100 |
+
+Too low = missed real stalls. Too high = false trips on normal load transients. Sweep a few speeds under known-good conditions first and record the baseline `sg_result` — set the threshold to ~50% of that.
 
 ### 4f. Watchdog (line 109)
 
@@ -208,7 +218,15 @@ Three files contain placeholder waypoint poses that **must** be taught on the ph
 | `test_calibration.script` | 91–93 | `START_POSE`, `MID_POSE`, `END_POSE` |
 | `extrusion_control.script` | (uses `movel` inline) | Application-specific |
 
-**Procedure:** Move robot to safe position via teach pendant, record pose (`get_actual_tcp_pose()`), paste into script. The path should be ~100mm total length in a clear region of the workspace.
+**Procedure (on the teach pendant):**
+
+1. **Move the robot** to the desired START pose using the **Move** tab jog controls (free-drive with the rear button is fastest). Choose a safe position clear of the workspace fixtures with ~100 mm of travel in the Y or Z direction before hitting the MID and END poses.
+2. **Read the current TCP pose** via the teach pendant: go to the **Move** tab and read the pose values under "Feature: Base". Alternatively, in a temporary Program, drop an **Assignment** node and use `pose = get_actual_tcp_pose()`, then read `pose` in the variable panel. Values are in meters (X, Y, Z) and radians (RX, RY, RZ).
+3. **Copy the six values** into the script as `p[X, Y, Z, RX, RY, RZ]`.
+4. **Repeat for MID and END** — MID is typically 50% along the path, END is 100%. Keep the orientation (RX, RY, RZ) the same across all three unless intentionally varying it.
+5. **Uncomment the waypoint-dependent sub-tests** (test_basic.script sub-tests G/H) after the three poses are populated and the test has been replayed once in a safe state (low speed, dry pump).
+
+> The poses stay in the script (not the installation), so each team member's checkout needs them re-taught if working in a different lab.
 
 ### 5b. Safety Limit (must match bridge)
 

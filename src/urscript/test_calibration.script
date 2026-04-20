@@ -6,10 +6,11 @@
 # Prerequisites (all from validation test, plus):
 #   - System validation test (test_basic.script) PASSED
 #   - Pump physically connected to stepper motor
-#   - Pump primed with paste or test fluid (no air in fluid path)
-#   - Scale or graduated cylinder available for measurement
+#   - Pump primed (run in extrude mode at 5-10 mm/s until a continuous bead
+#     comes out of the nozzle with no air bubbles -- wipe any initial drips).
+#   - Scale (0.1 g resolution or better) or graduated cylinder for measurement
 #   - Catch tray under nozzle
-#   - Clean nozzle tip
+#   - Clean nozzle tip (wipe before starting; mass tare is done in Sub-test A)
 #
 # Register mapping (from docs/register_allocation.md):
 #
@@ -66,6 +67,12 @@ RETRACT_EXTRUDE_TIME = 5.0     # seconds to extrude before each retraction trial
 RETRACT_OBSERVE_TIME = 5.0     # seconds to observe drip after retraction
 
 # Retraction trial parameters: [distance_mm, speed_mm_s]
+# Trial 1 is the control (no retraction). Trials 2-6 sweep distance at two
+# speed bands. These are sensible starting points for a typical viscous paste
+# with a 40 mm/rev drivetrain -- adjust based on observation:
+#   - Still drips after SETTLE_TIME on all trials -> increase distances (7, 10 mm).
+#   - Nozzle ingests air on restart (sputters) -> decrease distances.
+#   - Retract stalls or skips steps -> lower speeds (below 10 mm/s).
 RETRACT_DIST_1 = 0.0
 RETRACT_SPD_1 = 0.0
 RETRACT_DIST_2 = 0.5

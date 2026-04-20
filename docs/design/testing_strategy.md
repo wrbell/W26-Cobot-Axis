@@ -120,7 +120,7 @@ pytest tests/ -k "estop" -v
 
 ### `conftest.py` — Shared Fixtures
 
-The top-level `tests/conftest.py` provides fixtures reused across all test modules:
+The package conftest (`src/bridge/tests/conftest.py`) provides fixtures reused across all test modules:
 
 - **`mock_unix_socket`**: A `socketpair(AF_UNIX)` that creates a connected pair of Unix sockets. One end acts as the "client" (KlipperClient connects to it) and the other as the "server" (test code sends/receives). This avoids filesystem socket creation entirely.
 - **`fake_klippy_server`**: A helper class that wraps the server-side socket, implements the ETX-delimited JSON protocol, and provides methods like `expect_request(method)` and `send_response(id, result)`.
@@ -477,6 +477,13 @@ These tests verify `start()` behavior without running an infinite loop:
 
 ## 7. Integration Tests: URSim Setup
 
+> **Status: planned, not yet implemented.** The paths in this section
+> (`tests/docker/…`, `tests/integration/…`) describe the proposed layout for
+> URSim-backed integration tests. None of these files exist in the repo today;
+> URSim is currently driven manually per `docs/ursim_quickstart.md`. When the
+> fixtures land, they will live under `src/bridge/tests/integration/` to stay
+> co-located with the unit suite.
+
 ### 7.1 What Is URSim
 
 URSim (Universal Robots Simulator) is the official offline simulator that provides a full RTDE interface identical to a physical robot. It runs as a Docker container and exposes the same TCP ports as a real UR controller, including port 30004 for RTDE.
@@ -718,7 +725,8 @@ def pytest_collection_modifyitems(config, items):
 | `klipper_client.py` | >= 95% | All code paths testable with socket mocks |
 | `rtde_client.py` | >= 90% | Stub mode is fully testable; mocked ur_rtde covers the rest. The `import` try/except at module level is hard to cover both branches in one test run. |
 | `bridge_daemon.py` | >= 85% | Most logic is testable. The `start()` infinite loop and `main()` argparse entry point are harder to cover completely. |
-| **Overall** | **>= 90%** | Realistic for a well-tested bridge daemon |
+| **Overall (CI floor)** | **>= 90%** | Enforced by `--cov-fail-under=90` in `.github/workflows/ci.yml` |
+| **Overall (actual)** | **100%** | All modules reach 100% in the current 479-test suite. The 90% CI floor stays in place as a safety net so routine refactors don't silently drop coverage. |
 
 ### 9.2 Hard-to-Test Areas
 
@@ -847,7 +855,7 @@ This table enumerates every combination of input commands and the expected Klipp
 ## Appendix B: Fixture Dependency Graph
 
 ```
-tests/conftest.py
+src/bridge/tests/conftest.py
   |
   +-- mock_unix_socket          (socketpair for KlipperClient tests)
   +-- fake_klippy_server        (FakeKlippy wrapping server-side socket)
@@ -857,7 +865,7 @@ tests/conftest.py
   +-- bridge                    (Bridge with mocked clients)
   +-- dry_run_bridge            (Bridge with dry_run=True)
 
-tests/integration/conftest.py
+src/bridge/tests/integration/conftest.py  (planned -- Section 7)
   |
   +-- ursim_container           (session-scoped Docker lifecycle)
   +-- ursim_dashboard           (TCP connection to port 29999)

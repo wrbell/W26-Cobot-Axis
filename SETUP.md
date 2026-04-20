@@ -254,15 +254,26 @@ This produces `~/klipper/out/klipper.uf2`.
 **3. Flash the firmware:**
 
 ```bash
-# Find the USB drive (look for a ~128M disk, usually sda1)
-lsblk
-sudo mount /dev/sda1 /mnt    # adjust device if lsblk shows a different name
+# Find the RP2040 mass-storage device (usually /dev/sda1, but confirm with lsblk).
+# Look for a 128 MB FAT partition labeled "RPI-RP2":
+lsblk -f | grep -i RPI-RP2
+# Example output:
+#   sda1  vfat   FAT16  RPI-RP2  0000-0000  124M  0% /media/pi/RPI-RP2
+
+# If the device auto-mounted (common on desktop Linux), copy directly:
+cp ~/klipper/out/klipper.uf2 /media/$USER/RPI-RP2/
+sync
+
+# Otherwise, mount it manually (substitute the device from lsblk):
+sudo mount /dev/sda1 /mnt
 sudo cp ~/klipper/out/klipper.uf2 /mnt/
 sudo sync
 sudo umount /mnt
 ```
 
 The board reboots automatically into Klipper firmware after the file is copied.
+If `lsblk` shows no `RPI-RP2` partition, the board is not in BOOTSEL mode -- repeat
+step 2 (hold BOOTSEL while pressing RESET).
 
 ### Subsequent Flashes (Board Already Running Klipper)
 

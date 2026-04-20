@@ -34,8 +34,9 @@ Pi400 (optional HMI) sits on the same network for SSH/web UI -- not powered from
 
 The UR30 provides two distinct 24V power points relevant to this project: the
 **Controller Box I/O power block** and the **Tool I/O flange connector**. All data below
-is taken directly from the UR30 User Manual (included in this repository at
-`docs/UR30 User Manual.pdf`).
+is taken directly from the UR30 User Manual (download from
+[Universal Robots support](https://www.universal-robots.com/download/manuals-e-series/user/ur30/)
+-- look up the specific revision matching the controller firmware in the lab).
 
 ### 1.1 Controller Box I/O -- Power Block (Manual pp. 82-84)
 
@@ -553,7 +554,7 @@ The Pi400 (optional HMI) is powered independently and does not affect this budge
 
 | Document | Location |
 |----------|----------|
-| UR30 User Manual (included) | `docs/UR30 User Manual.pdf` |
+| UR30 User Manual | https://www.universal-robots.com/download/manuals-e-series/user/ur30/ |
 | Controller I/O specs | Manual Section 9.4, pp. 82-84 |
 | Tool I/O connector pinout | Manual Section 9.7.1, p. 94 |
 | Tool I/O electrical specs | Manual Section 9.7.6, p. 101 |
