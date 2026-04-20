@@ -34,9 +34,16 @@ EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
 MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
 ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
 
-# Sub-test G waypoints — MUST be taught on the physical robot.
-# Replace these placeholder poses with actual taught positions in a safe
-# region of the workspace. Total path length should be ~100mm.
+# Sub-test G waypoints — MUST be taught on the physical robot before
+# uncommenting Sub-test G at the bottom of this file.
+#
+# How to teach: see docs/config_guide.md Section 5a for the full procedure.
+# Short version:
+#   1. Free-drive robot to safe START position, read TCP pose from teach pendant
+#      Move tab (or `pose = get_actual_tcp_pose()` in a scratch program).
+#   2. Repeat for MID (~50% along path) and END (~100%).
+#   3. Total path length should be ~100 mm in a clear workspace region.
+#   4. Keep RX/RY/RZ consistent across all three unless intentionally varying.
 # Format: p[x, y, z, rx, ry, rz] in meters and radians.
 START_POSE = p[0.3, -0.2, 0.1, 0, 3.14, 0]
 MID_POSE   = p[0.35, -0.2, 0.1, 0, 3.14, 0]

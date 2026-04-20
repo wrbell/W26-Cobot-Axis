@@ -258,7 +258,11 @@ Run through these in order. Each step depends on the previous one.
   MANUAL_STEPPER STEPPER=pump MOVE=10 SPEED=5
   ```
   Motor should rotate visibly.
-- [ ] **RTDE round-trip** — load `test_basic.script` in URSim, run Sub-tests A–F — motor responds to RTDE commands through the bridge
+- [ ] **RTDE round-trip** — load [`src/urscript/test_basic.script`](../src/urscript/test_basic.script) in URSim, run Sub-tests A–F — motor responds to RTDE commands through the bridge. In a separate terminal, follow the bridge log:
+  ```bash
+  ssh pi@w26-dev.local journalctl -u w26-bridge -f
+  ```
+  Expected: for each sub-test the teach-pendant log shows `[PASS] Sub-test X`, and the bridge log shows the corresponding mode/rate/enable register changes (e.g., `mode=1 rate=10.0 enable=True`). Sub-tests G and H are waypoint-dependent and stay commented out until `config_guide.md` Section 5a is done.
 
 > **Next step:** Once the bench is verified, configure hardware-dependent parameters (motor current, rotation distance, waypoints, etc.) using `docs/config_guide.md`.
 
