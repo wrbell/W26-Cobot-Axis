@@ -1,0 +1,38 @@
+// Markdownlint config for W26-Cobot-Axis.
+// Intentionally permissive — we lint for real structural bugs (broken link
+// anchors, unclosed code fences, mismatched table columns), not style nits
+// like missing blank lines or bare URLs. The goal is a gate that stays green
+// across our 60+ existing docs without a bulk reformat.
+//
+// If you want to tighten a rule, do it in one focused PR that also fixes the
+// fallout, rather than flipping it silently.
+{
+  "default": true,
+
+  // Noisy style rules that would require reformatting most existing docs.
+  // These are stylistic, not structural — disabling them is a deliberate
+  // trade-off against the cost of a repo-wide reformat.
+  "MD013": false,  // line length
+  "MD022": false,  // blanks around headings
+  "MD031": false,  // blanks around fences
+  "MD032": false,  // blanks around lists
+  "MD033": false,  // inline HTML (we use <details> in a few places)
+  "MD034": false,  // bare URLs (links in tables are common)
+  "MD036": false,  // emphasis as heading (intentional in memo-style docs)
+  "MD040": false,  // fenced code language tag
+  "MD041": false,  // first line must be H1
+  "MD060": false,  // table column style (pipe spacing)
+  "MD025": false,  // single H1 — slide-deck markdown uses one H1 per slide
+
+  // Rules we keep with small tweaks.
+  "MD024": { "siblings_only": true },  // duplicate headings OK in different sections
+  "MD029": { "style": "ordered" },  // ordered list numbers must be 1. 2. 3.
+
+  // Scope — skip vendored, generated, and tool-local content.
+  "ignores": [
+    "vendor/**",
+    "node_modules/**",
+    ".claude/**",
+    ".github/**"
+  ]
+}

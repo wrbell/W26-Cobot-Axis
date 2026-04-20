@@ -141,6 +141,7 @@ Final report due: **Thu Apr 23, 2026**. Report is max 2000 words with figures/ta
 | CI/CD setup guide (Tiers 1–3) | `docs/design/ci_cd_guide.md` |
 | URSim quick-start runbook | `docs/ursim_quickstart.md` |
 | Fresh Pi setup guide (first-time install) | `SETUP.md` |
+| Headless Pi setup (laptop, no switch) | `docs/headless_setup.md` |
 | Dev bench bring-up guide | `docs/dev_bench_guide.md` |
 | Hardware config & calibration guide | `docs/config_guide.md` |
 | Trade: Klipper vs Lingua Franca | `trades/lingua_franca_vs_klipper.md` |

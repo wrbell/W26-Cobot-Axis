@@ -14,6 +14,7 @@ This document scopes what's required for each Phase 2 deliverable, what informat
 A single table showing every electrical connection in the system — which pin on which device connects to what, with signal name, direction, and voltage level.
 
 ### Devices to Cover
+
 | Device | Interface to Document |
 |--------|----------------------|
 | SKR Pico V1.0 | E-axis stepper pins, TMC2209 UART, USB-C, power input (VIN/GND), fan port (optional cooling) |
@@ -34,6 +35,7 @@ A single table showing every electrical connection in the system — which pin o
 - **Pi GPIO:** Pins 2/4 = 5V power in, Pin 6 = GND (if powering via GPIO header)
 
 ### Information We're Missing
+
 | Gap | Impact | How to Resolve |
 |-----|--------|----------------|
 | **Which Pi model** | Determines USB port type, GPIO header presence, power connector | Check lab inventory or purchase Pi 4B |
@@ -58,6 +60,7 @@ Single table with columns: Device | Pin/Terminal | Signal Name | Direction | Vol
 A table showing every device's current draw from the 24V bus, with idle/typical/peak scenarios, demonstrating the system stays within the UR30's 2A continuous / 3.5A burst rating.
 
 ### Information We Have (from `docs/pi_power.md`)
+
 | Device | Current from 24V | Status |
 |--------|------------------|--------|
 | Pi (via buck @ ~90% eff) | ~0.35A typical | **Known** (assuming Pi 4B, 1.5A @ 5.1V design current) |
@@ -68,6 +71,7 @@ A table showing every device's current draw from the 24V bus, with idle/typical/
 **Total known:** ~1.0A typical, ~1.4A peak — within 2A continuous budget.
 
 ### Information We're Missing
+
 | Gap | Impact | How to Resolve |
 |-----|--------|----------------|
 | **Actual motor rated current** | Determines if 2A budget is sufficient or if external PSU is needed | Awaiting provided motor — use 1.0A placeholder (typical NEMA 17) |
@@ -103,6 +107,7 @@ Bottom row: Total with margin calculation vs UR30 budget.
 A visual diagram showing all functional blocks in the system, the signals flowing between them, and the feedback path. This is the key diagram for the Phase 2 memo — it communicates the entire system design at a glance.
 
 ### Blocks to Show
+
 | Block | What It Represents |
 |-------|-------------------|
 | UR30 Controller | Robot controller running URScript, source of extrusion commands |
@@ -115,6 +120,7 @@ A visual diagram showing all functional blocks in the system, the signals flowin
 | 24V Power Supply | UR30 power block → buck converter → distribution |
 
 ### Signals to Show
+
 | Signal | From → To | Protocol/Type | Data |
 |--------|-----------|---------------|------|
 | Extrusion commands | UR30 → Pi | RTDE over TCP/IP (port 30004) | mode, rate, TCP speed, enable, e-stop, home |
@@ -133,6 +139,7 @@ A visual diagram showing all functional blocks in the system, the signals flowin
 - **Latency per segment** documented in `docs/latency_analysis.md`
 
 ### Information We're Missing
+
 | Gap | Impact | How to Resolve |
 |-----|--------|----------------|
 | **Feedback path from Klipper** | What status do we actually read back? Currently reporting commanded rate, not actual. | Design decision — the bridge enhancement design doc (in progress) will address this |
@@ -187,6 +194,7 @@ The design spec mostly consolidates existing analysis into a formal specificatio
 A list of every component needed to build the system, with part numbers from UMich-contracted suppliers (DigiKey, Newark, Grainger, MSC Direct, BH Photo Video), quantities, and unit prices.
 
 ### Components
+
 | Component | Qty | Status | Supplier |
 |-----------|-----|--------|----------|
 | SKR Pico V1.0 | 1 | **On hand** | Already have |
@@ -207,6 +215,7 @@ A list of every component needed to build the system, with part numbers from UMi
 | 3D-printed enclosure(s) | TBD | **Dawood — design needed** | Instructor's printer |
 
 ### Information We're Missing
+
 | Gap | Impact | How to Resolve |
 |-----|--------|----------------|
 | **Pi model — on hand?** | Determines if we need to purchase | Check lab inventory |

@@ -64,8 +64,6 @@ These registers are written by the RTDE bridge daemon on the Pi and read by URSc
 - `input_double_register_0` (actual extrusion rate) is derived from Klipper's `motion_report.live_extruder_velocity` or equivalent `manual_stepper` status object.
 - Error codes in `input_int_register_1` are defined by the bridge daemon. Additional codes can be added as needed.
 
-### Registers Reserved for Future Use
-
 ### Active Registers (Added)
 
 | Register | Type | Purpose | Range / Values |

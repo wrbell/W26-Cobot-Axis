@@ -19,8 +19,8 @@ Cross-references `todo.md` (master tracker) and design docs for details.
 - [x] Merge PR #9 (codecov/codecov-action 5->6) -- auto-merged by dependabot workflow
 
 ### Bug Fixes (code changes required before hardware)
-- [x] **Fix `SYNC=0` in `stepper_move()`** -- `src/bridge/klipper_client.py:150` -- append ` SYNC=0` to G-code string. Without this, the bridge main loop blocks for the entire move duration at 125 Hz.
-- [x] **Fix `SYNC=0` in `stepper_set_position()`** -- `src/bridge/klipper_client.py:157` -- same issue, add ` SYNC=0` for consistency.
+- [x] **Fix `SYNC=0` in `stepper_move()`** -- `src/bridge/klipper_client.py:150` -- append `SYNC=0` to G-code string. Without this, the bridge main loop blocks for the entire move duration at 125 Hz.
+- [x] **Fix `SYNC=0` in `stepper_set_position()`** -- `src/bridge/klipper_client.py:157` -- same issue, add `SYNC=0` for consistency.
 - [x] Update affected tests in `src/bridge/tests/` to expect `SYNC=0` in commands.
 - [x] Run full test suite: `python -m pytest src/bridge/tests/ -v` (must stay at 479+ tests, 100% coverage).
 - [x] Commit fix to main.
