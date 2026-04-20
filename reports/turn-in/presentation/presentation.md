@@ -110,10 +110,10 @@ UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mb
 
 - **URScript** on UR30: writes mode/rate/enable/e-stop/home to output registers at 500 Hz
 - **Bridge daemon** (Python, 11 modules, **479 tests, 100 % coverage**):
-    - `rtde_client` (reads) → `bridge_daemon` state machine → `klipper_client` (writes G-code)
-    - `watchdog` stops stepper if no RTDE data in 500 ms
-    - `extrusion_profile` — linear / polynomial / lookup-table rate shaping
-    - `klipper_status` polls TMC2209 diagnostics at 20 Hz
+  - `rtde_client` (reads) → `bridge_daemon` state machine → `klipper_client` (writes G-code)
+  - `watchdog` stops stepper if no RTDE data in 500 ms
+  - `extrusion_profile` — linear / polynomial / lookup-table rate shaping
+  - `klipper_status` polls TMC2209 diagnostics at 20 Hz
 - **Klipper** on Pi: motion planning + 100 ms MCU lookahead buffer
 - **Klipper firmware** on RP2040: 16x microstepping, StealthChop mode
 
@@ -146,9 +146,9 @@ UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mb
 - TMC2209 has a **DIAG pin** that asserts in microseconds when load crosses the StallGuard threshold
 - Klipper polls over UART at ~4 Hz — **250 ms blind window** for stall damage
 - **Our solution:** dedicated firmware on RP2040's idle **Core1**
-    - Core1 monitors DIAG pin in hardware, debounces, stores event + timestamp in shared SRAM
-    - Core0 (Klipper) serves `stallguard_query` / `stallguard_clear` MCU commands
-    - Klippy extras module polls at 20 Hz → RTDE input register → URScript can halt robot on stall
+  - Core1 monitors DIAG pin in hardware, debounces, stores event + timestamp in shared SRAM
+  - Core0 (Klipper) serves `stallguard_query` / `stallguard_clear` MCU commands
+  - Klippy extras module polls at 20 Hz → RTDE input register → URScript can halt robot on stall
 - Safe spinlock #16, zero impact on Klipper step timing
 - Validated by `docs/design/hitl_plan.md` TP-06
 

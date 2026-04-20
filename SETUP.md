@@ -48,6 +48,8 @@ Step-by-step guide for setting up the complete software stack on a fresh Raspber
 | Computer with SD card reader | For flashing the OS image |
 | (Optional) Pi400 | On the same network for SSH access and Mainsail web UI |
 
+> **No switch available?** If you're doing bench bring-up from a Mac or Windows laptop with no ethernet switch, follow [docs/headless_setup.md](docs/headless_setup.md) through Step 4 first, then return to this guide at [§4 Step 3: Clone the Repository](#4-step-3-clone-the-repository).
+
 ### Software on Your Computer
 
 - **Raspberry Pi Imager** -- download from https://www.raspberrypi.com/software/
@@ -126,6 +128,8 @@ Open `http://w26-pi.local/` in a browser. You should see the Mainsail web UI (it
 ## 3. Step 2: Network Configuration
 
 The Pi must be reachable by the UR30 controller over Ethernet. Both devices must be on the same subnet.
+
+> **Headless bench setup (no switch)?** If you're working from a laptop with only a direct ethernet cable to the Pi, skip this section for now and follow [docs/headless_setup.md](docs/headless_setup.md) instead. Come back to this section when you move to the lab and have a real switch plus the UR30 on the subnet.
 
 ### Option A: DHCP (Simpler, Good for Development)
 

@@ -243,7 +243,7 @@ Load `test_basic` in the teach pendant and run Sub-tests A through F and I (thes
 | `Connection refused` | Robot not powered on in noVNC UI — click power → ON → START |
 | `Connection timed out` | Wrong IP address, or firewall blocking port 30004 |
 | `ur_rtde not installed` | `pip install ur-rtde` (Windows x64 wheel available) |
-| Bridge runs but shows stub mode | `ur_rtde` import failed — check `pip list | findstr ur` |
+| Bridge runs but shows stub mode | `ur_rtde` import failed — check `pip list \| findstr ur` |
 
 ### RTDE frequency mismatch
 

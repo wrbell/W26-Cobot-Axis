@@ -327,7 +327,7 @@ All software features are being designed before implementation. Design docs in `
 Software-complete milestone. All bridge code is written and tested (479 tests, 100% coverage). Tag v1.0.0 before hardware arrives so we have a known-good baseline to deploy.
 
 #### Software Fixes (code changes needed)
-- [x] **Add `SYNC=0` to `stepper_move()`** — `klipper_client.py:150` sends `MANUAL_STEPPER STEPPER=pump MOVE=... SPEED=...` without `SYNC=0`. Klipper blocks the gcode response until the move physically completes — at 125 Hz main loop this freezes the bridge for the entire move duration (seconds). Append ` SYNC=0` to the gcode string. Update tests.
+- [x] **Add `SYNC=0` to `stepper_move()`** — `klipper_client.py:150` sends `MANUAL_STEPPER STEPPER=pump MOVE=... SPEED=...` without `SYNC=0`. Klipper blocks the gcode response until the move physically completes — at 125 Hz main loop this freezes the bridge for the entire move duration (seconds). Append `SYNC=0` to the gcode string. Update tests.
 - [x] **Add `SYNC=0` to `stepper_set_position()`** — same issue at `klipper_client.py:157`. SET_POSITION doesn't block as long but should be non-blocking for consistency. Update tests.
 
 #### Validation (no code changes — just run/review things)

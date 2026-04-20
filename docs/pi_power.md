@@ -19,11 +19,11 @@ Pi400 (optional HMI) sits on the same network for SSH/web UI -- not powered from
 
 ## Table of Contents
 
-1. [UR30 Controller -- 24V Power Source](#1-ur30-controller--24v-power-source)
-2. [Raspberry Pi -- Klipper Host + RTDE Bridge](#2-raspberry-pi--klipper-host--rtde-bridge)
-3. [Raspberry Pi 400 -- Optional HMI Terminal](#3-raspberry-pi-400--optional-hmi-terminal)
-4. [BigTreeTech Pico (BTT Pico) -- Stepper Controller](#4-bigtreetech-pico-btt-pico--stepper-controller)
-5. [NEMA 17 Stepper Motor -- Actuator](#5-nema-17-stepper-motor--actuator)
+1. [UR30 Controller -- 24V Power Source](#1-ur30-controller----24v-power-source)
+2. [Raspberry Pi -- Klipper Host + RTDE Bridge](#2-raspberry-pi----klipper-host--rtde-bridge)
+3. [Raspberry Pi 400 -- Optional HMI Terminal](#3-raspberry-pi-400----optional-hmi-terminal)
+4. [BigTreeTech Pico (BTT Pico) -- Stepper Controller](#4-bigtreetech-pico-btt-pico----stepper-controller)
+5. [NEMA 17 Stepper Motor -- Actuator](#5-nema-17-stepper-motor----actuator)
 6. [Power Distribution Design](#6-power-distribution-design)
 7. [Total Power Budget](#7-total-power-budget)
 8. [Datasheet and Reference Links](#8-datasheet-and-reference-links)
