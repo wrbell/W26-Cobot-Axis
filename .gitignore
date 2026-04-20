@@ -17,6 +17,9 @@ htmlcov/
 # macOS
 .DS_Store
 
+# Office lock files
+~$*
+
 # IDE
 .vscode/
 .idea/
