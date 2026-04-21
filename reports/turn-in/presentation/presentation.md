@@ -117,7 +117,10 @@ UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mb
 - **Klipper** on Pi: motion planning + 100 ms MCU lookahead buffer
 - **Klipper firmware** on RP2040: 16x microstepping, StealthChop mode
 
-<!-- NOTES: Single-threaded, synchronous by design — predictable timing beats throughput. Stateless translator between two async systems. All 479 tests run in ~1.5s, no hardware needed. -->
+<!-- FIG 2: Communication Flow — insert after render -->
+<!-- FIG 5: Software Component Diagram — insert after render -->
+<!-- FIG 6: Bridge Daemon State Machine — insert after render -->
+<!-- NOTES: Single-threaded, synchronous by design — predictable timing beats throughput. Stateless translator between two async systems. All 479 tests run in ~1.5s, no hardware needed. Figures 2/5/6 live in reports/turn-in/report/figures/ — paste fig5 (components) as main visual, reference fig6 (state machine) in Q&A if asked how fault recovery works. -->
 
 ---
 
@@ -138,6 +141,22 @@ UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mb
 
 <!-- FIG 8 -->
 <!-- NOTES: The Klipper lookahead is a latency/precision tradeoff we chose intentionally — at the MCU level, step timing is microsecond-precise even though the Linux host has 1-10 ms scheduling jitter. -->
+
+---
+
+# Software Quality and Verification
+
+- **479 unit + integration tests** across 10 files, **100 % coverage** on every bridge module
+- Ruff clean; strict type checking; zero `TODO`/`FIXME` in production code
+- **Firmware CI quality gates** (per-commit):
+  - `cppcheck` static analysis on the Core1 StallGuard overlay
+  - LTO-aware symbol verification (compiled symbol names survive Link-Time Optimization)
+  - Stack-usage analysis (`-fstack-usage` on overlay entry points)
+  - SRAM + flash budget gates (fails CI if overlay pushes over 200 KB / 1.9 MB)
+- **Weekly patch-freshness cron** re-applies the StallGuard overlay against upstream Klipper → catches drift before it breaks our build
+- Hardware-free dev loop: `FakeKlippy` mocks + `ur_rtde` stub → 479 tests run in ~1.5 s with zero hardware
+
+<!-- NOTES: This slide exists because software rigor is *the* distinguishing evidence of engineering in a project where most hardware hasn't arrived yet. If asked "how do you know this works?" — the answer is here. The firmware CI is what catches regressions if upstream Klipper reshapes rp2040/main.c between now and submission. -->
 
 ---
 
@@ -169,15 +188,30 @@ UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mb
 
 ---
 
+# Measured Performance (Phase 4)
+
+<!-- FIG 8: Latency Model vs Measured — left half of slide -->
+<!-- FIG 10: Extrusion Accuracy Plot — right half of slide -->
+
+- **Figure 8 (left):** predicted vs measured latency per signal-path segment — bar chart from `scripts/report_figures.py --csv <bringup.csv>`
+- **Figure 10 (right):** commanded vs measured extrusion rate over a 30 s run at 5 / 10 / 25 / 50 mm/s — with ±2 % spec band shaded
+- Key numbers to recite:
+  - End-to-end latency: p50 = **[TBD from Wed data]**, p99 = **[TBD]** (target < 20 ms)
+  - Steady-state accuracy: mean |err| = **[TBD]** %, p95 = **[TBD]** % (target < 5 %)
+
+<!-- NOTES: Placeholder slide — the two PNGs from scripts/report_figures.py drop in here after Wednesday's bringup. Target layout is two figures side-by-side, bullets summarizing below. If latency misses spec, own it; Phase 4 is about learning what the real system does, not ratifying the prediction. -->
+
+---
+
 # Results vs Specification
 
 | Target | Result |
 |--------|--------|
-| End-to-end latency < 20 ms P95 | 5–8 ms predicted; measurement deferred to Phase 4 |
+| End-to-end latency < 20 ms P95 | 5–8 ms predicted; measurement from Phase 4 (see prior slide) |
 | E-stop response < 2 ms | Implemented; measurement deferred |
 | Watchdog < 500 ms | Implemented, 100 % tested |
 | Power draw < 2 A @ 24 V | 1.0 A typ / 1.4 A peak predicted |
-| Speed accuracy < 5 % | Deferred to hardware |
+| Speed accuracy < 5 % | Phase 4 (see prior slide) |
 | 479 unit tests @ 100 % coverage | **Achieved** |
 
 **Status:** software and firmware complete; hardware integration pending motor/pump delivery
@@ -251,6 +285,25 @@ Full BOM with DigiKey/Newark part numbers: `docs/phase2/bom.md`
 | Stepper motor | 0.10 A | 0.50 A | 1.00 A | TBD placeholder NEMA 17 |
 | Cooling fan (opt.) | 0.00 A | 0.04 A | 0.08 A | If TMC2209 cooling required |
 | **Total** | **0.30 A** | **~0.97 A** | **~1.63 A** | vs 2.0 A / 3.5 A UR30 budget |
+
+---
+
+# Backup: Failure Modes and Safe-State Handling
+
+The state machine in `bridge_daemon.py` drives all off-nominal behavior to a single **FAULT** state with the stepper disabled.
+
+| Failure | Detector | Response time | Fallback |
+|---------|----------|---------------|----------|
+| UR30 RTDE packet lost | `watchdog.py` — 500 ms timeout | ≤ 500 ms | stepper disabled, fault=1 → UR |
+| Klippy socket closed | `klipper_client` reconnect loop | ≤ 2 s | RECONNECTING state, exponential backoff |
+| TMC2209 stall (pump blocked) | `stallguard_monitor` (Core1) | < 1 ms hardware + 50 ms delivery | FAULT, error=stall → UR |
+| TMC2209 thermal warning | `klipper_status` (20 Hz poll) | ≤ 50 ms | disable motor, notify UR |
+| 24 V power droop | TVS + bulk cap absorb | µs | Pi5V buck brownout, systemd restart |
+| SIGTERM / reboot | systemd + `ExecStop` | ≤ 500 ms | G-code STEPPER off before exit |
+
+**Design principle:** the stepper is off by default — every non-idle state is an explicit positive command. A lost connection cannot leave the motor running.
+
+<!-- NOTES: This is the "defense in depth" backup slide. Q&A magnet for "what if X fails" questions. Each row has a concrete handler — pointable to a file:line in the codebase. If pressed, cite docs/design/hitl_plan.md for the full fault matrix. -->
 
 ---
 

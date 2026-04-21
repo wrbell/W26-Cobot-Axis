@@ -1,0 +1,24 @@
+%% Figure 2 — Communication Flow Diagram
+%% Sequence of a single extrusion command from URScript to stepper.
+
+sequenceDiagram
+    autonumber
+    participant UR as URScript<br/>(UR30)
+    participant RTDE as RTDE server<br/>(port 30004)
+    participant B as Bridge daemon<br/>(Python, 125 Hz)
+    participant K as Klipper host<br/>(klippy)
+    participant F as Klipper MCU<br/>(RP2040)
+    participant M as Stepper<br/>motor
+
+    UR->>RTDE: write output_int_register_0<br/>(mode=1) + rate + enable
+    loop every 8 ms (125 Hz)
+        B->>RTDE: read output registers
+        Note over B: state machine +<br/>extrusion profile +<br/>MAX_RATE clamp
+        B->>K: MANUAL_STEPPER MOVE=… VELOCITY=…
+        K->>F: binary step schedule<br/>(USB 12 Mbps)
+        F->>M: STEP / DIR / EN pulses
+        F-->>K: status report
+        K-->>B: tmc_status / position
+        B->>RTDE: write input registers<br/>(status, actual_rate, ready, fault)
+    end
+    Note over B,F: Watchdog: if no RTDE packet<br/>for 500 ms → disable stepper<br/>→ write fault=1 to UR

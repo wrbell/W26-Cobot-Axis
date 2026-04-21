@@ -1,0 +1,33 @@
+%% Figure 1 — System Architecture Block Diagram
+%% Simplified for final report. See docs/phase2/block_diagram.md for extended version.
+
+flowchart LR
+    UR30["<b>UR30 Controller</b><br/>URScript + RTDE server<br/>(500 Hz, port 30004)"]
+    Switch["Gigabit Switch"]
+    Pi["<b>Raspberry Pi</b><br/>Bridge daemon (125 Hz)<br/>+ Klipper host"]
+    SKR["<b>SKR Pico</b><br/>RP2040 + TMC2209"]
+    Motor["Stepper Motor"]
+    Pump["Paste Pump"]
+
+    UR30 <-->|"RTDE/TCP"| Switch
+    Switch <-->|"Ethernet"| Pi
+    Pi <-->|"USB 12 Mbps<br/>Klipper MCU protocol"| SKR
+    SKR -->|"step/dir/en<br/>+ UART"| Motor
+    Motor -->|"shaft"| Pump
+
+    UR24V["UR 24 V supply<br/>2 A cont / 3.5 A burst"] -.->|"Fused 24 V"| SKR
+    UR24V -.->|"Buck to 5.1 V"| Pi
+
+    Pi400["Pi 400 (optional HMI)<br/>SSH / Mainsail"]
+    Switch <-.-> Pi400
+
+    classDef ctrl fill:#dfe9f4,stroke:#2e4e6e,stroke-width:1.5px;
+    classDef pi fill:#e3f0df,stroke:#4a7a4a,stroke-width:1.5px;
+    classDef mcu fill:#f4ecd8,stroke:#8a7a3a,stroke-width:1.5px;
+    classDef mech fill:#f4dfdf,stroke:#8a4a4a,stroke-width:1.5px;
+    classDef opt  fill:#f5f5f5,stroke:#888,stroke-dasharray:4 3;
+    class UR30 ctrl
+    class Pi pi
+    class SKR mcu
+    class Motor,Pump mech
+    class Pi400,UR24V opt
