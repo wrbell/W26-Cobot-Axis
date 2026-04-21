@@ -15,7 +15,7 @@ REPO_DIR="$HOME/W26-Cobot-Axis"
 KLIPPER_DIR="$HOME/klipper"
 KLIPPY_ENV="$HOME/klippy-env"
 MOONRAKER_DIR="$HOME/moonraker"
-KLIPPY_UDS="/tmp/klippy_uds"
+KLIPPY_UDS="$HOME/printer_data/comms/klippy.sock"
 SERVICE_FILE="w26-bridge.service"
 
 SKIP_FLASH=false

@@ -5,6 +5,8 @@ RTDE register mappings, connection defaults, and Klipper settings.
 Based on docs/register_allocation.md.
 """
 
+import os
+
 # ---------------------------------------------------------------------------
 # Network / connection
 # ---------------------------------------------------------------------------
@@ -13,7 +15,9 @@ RTDE_PORT = 30004
 RTDE_FREQUENCY = 500                 # Hz (e-Series default)
 RTDE_CONNECT_TIMEOUT = 5.0           # seconds — caps ur_rtde TCP connect (OS default is 60-120s)
 
-KLIPPY_SOCKET = "/tmp/klippy_uds"    # Klipper Unix domain socket
+KLIPPY_SOCKET = os.path.expanduser("~/printer_data/comms/klippy.sock")
+# ^ MainsailOS creates the socket here; klipper.service passes this path via -a.
+#   On vanilla Klipper installs the default is /tmp/klippy_uds; override if needed.
 
 # ---------------------------------------------------------------------------
 # RTDE Output Registers  (UR30 → Pi, written by URScript, read by bridge)
