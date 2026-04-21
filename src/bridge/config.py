@@ -10,7 +10,7 @@ import os
 # ---------------------------------------------------------------------------
 # Network / connection
 # ---------------------------------------------------------------------------
-UR30_HOST = "192.168.1.100"          # UR30 controller IP — update for your network
+UR30_HOST = "192.168.0.3"            # UR30 factory-default controller IP — override for your network
 RTDE_PORT = 30004
 RTDE_FREQUENCY = 500                 # Hz (e-Series default)
 RTDE_CONNECT_TIMEOUT = 5.0           # seconds — caps ur_rtde TCP connect (OS default is 60-120s)

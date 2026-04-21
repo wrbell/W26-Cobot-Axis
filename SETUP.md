@@ -152,9 +152,9 @@ sudo tee -a /etc/dhcpcd.conf << 'EOF'
 
 # W26 Static IP
 interface eth0
-static ip_address=192.168.1.50/24
-static routers=192.168.1.1
-static domain_name_servers=192.168.1.1
+static ip_address=192.168.0.50/24
+static routers=192.168.0.1
+static domain_name_servers=192.168.0.1
 EOF
 
 sudo systemctl restart dhcpcd
@@ -165,9 +165,9 @@ sudo systemctl restart dhcpcd
 ```bash
 sudo nmcli con mod "Wired connection 1" \
     ipv4.method manual \
-    ipv4.addresses 192.168.1.50/24 \
-    ipv4.gateway 192.168.1.1 \
-    ipv4.dns 192.168.1.1
+    ipv4.addresses 192.168.0.50/24 \
+    ipv4.gateway 192.168.0.1 \
+    ipv4.dns 192.168.0.1
 sudo nmcli con up "Wired connection 1"
 ```
 
@@ -175,19 +175,19 @@ sudo nmcli con up "Wired connection 1"
 
 | Device | IP Address | Notes |
 |--------|-----------|-------|
-| UR30 Controller | 192.168.1.100 | Set via teach pendant: Installation > Network |
-| Pi (Klipper host) | 192.168.1.50 | Static or DHCP reservation |
-| Pi400 (HMI) | 192.168.1.51 (or DHCP) | Optional |
+| UR30 Controller | 192.168.0.3 | Set via teach pendant: Installation > Network |
+| Pi (Klipper host) | 192.168.0.50 | Static or DHCP reservation |
+| Pi400 (HMI) | 192.168.0.51 (or DHCP) | Optional |
 | Subnet mask | 255.255.255.0 | /24 network |
 
 ### Verification Checkpoint
 
 ```bash
 # From the Pi -- verify UR30 is reachable:
-ping -c3 192.168.1.100
+ping -c3 192.168.0.3
 
 # From the Pi400 or your computer -- verify Pi is reachable:
-ping -c3 192.168.1.50
+ping -c3 192.168.0.50
 ```
 
 ---
@@ -470,7 +470,7 @@ Ensure the `[authorization]` section includes your local subnet:
 [authorization]
 trusted_clients:
     127.0.0.1
-    192.168.1.0/24
+    192.168.0.0/24
 cors_domains:
     *
 ```
@@ -483,7 +483,7 @@ Open `http://w26-pi.local/` in a browser from the Pi400 or any computer on the s
 
 ## 9. Step 8: End-to-End Verification
 
-This step requires the UR30 to be powered on and reachable at the configured IP address (default: `192.168.1.100`, set in `src/bridge/config.py`).
+This step requires the UR30 to be powered on and reachable at the configured IP address (default: `192.168.0.3`, set in `src/bridge/config.py`).
 
 **1. Load a URScript program on the UR30** that writes to the RTDE output registers. The project includes a test program at `src/urscript/extrusion_control.script`. Load it via the teach pendant or the UR30's Polyscope interface.
 
@@ -497,8 +497,8 @@ journalctl -u w26-bridge -f
 **3. Expected log output when everything is connected:**
 
 ```
-HH:MM:SS [bridge] INFO: Connecting to UR30 at 192.168.1.100:30004 ...
-HH:MM:SS [bridge] INFO: RTDE connected to 192.168.1.100
+HH:MM:SS [bridge] INFO: Connecting to UR30 at 192.168.0.3:30004 ...
+HH:MM:SS [bridge] INFO: RTDE connected to 192.168.0.3
 HH:MM:SS [bridge] INFO: Connected to klippy at /tmp/klippy_uds
 HH:MM:SS [bridge] INFO: Klipper state: Printer is ready
 HH:MM:SS [bridge] INFO: Bridge running at 125 Hz (dry_run=False)
@@ -531,7 +531,7 @@ These can be read in URScript or viewed in the teach pendant's RTDE monitor.
 | Mainsail shows "Klipper not connected" | Klipper service not running | `sudo systemctl restart klipper` then check `/tmp/klippy.log` |
 | `MCU protocol error` in klippy.log | Firmware version mismatch between host and MCU | Reflash SKR Pico: `cd ~/klipper && git pull && make clean && make && make flash FLASH_DEVICE=...` |
 | `Unable to read tmc uart` in klippy.log | TMC2209 UART wiring or address wrong | Verify `uart_pin`, `tx_pin`, `uart_address` in printer.cfg match SKR Pico hardware |
-| Bridge shows "RTDE connection failed" | UR30 not reachable or no program running | `ping 192.168.1.100` -- ensure UR30 is powered on with a program loaded |
+| Bridge shows "RTDE connection failed" | UR30 not reachable or no program running | `ping 192.168.0.3` -- ensure UR30 is powered on with a program loaded |
 | Bridge shows "Klipper connection failed" | klippy socket missing | `systemctl status klipper` -- fix Klipper issues first, check `/tmp/klippy_uds` exists |
 | Bridge shows "ur_rtde not installed -- using stub" | ur-rtde package not installed | `~/klippy-env/bin/pip install ur-rtde` -- check Boost is installed first |
 | Stepper does not move but bridge logs look correct | Current too low or wiring issue | Check `run_current` in printer.cfg; verify step/dir/enable pin wiring to motor |
@@ -606,7 +606,7 @@ sudo systemctl restart w26-bridge
 Edit `src/bridge/config.py` and change the `UR30_HOST` value:
 
 ```python
-UR30_HOST = "192.168.1.XXX"    # your new IP
+UR30_HOST = "192.168.0.XXX"    # your new IP
 ```
 
 Then restart:

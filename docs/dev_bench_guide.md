@@ -31,8 +31,8 @@ This catches integration issues that mock tests cannot: USB serial timing, Klipp
 |--------|-----------|---------------------|
 | UR controller | URSim (Docker on Windows) | Real UR30 |
 | Pi hostname | `w26-dev` | `w26-pi` |
-| Network | Home LAN, DHCP + mDNS | Lab switch, static IP `192.168.1.50` |
-| Bridge `--host` | Windows PC LAN IP | `192.168.1.100` (UR30) |
+| Network | Home LAN, DHCP + mDNS | Lab switch, static IP `192.168.0.50` |
+| Bridge `--host` | Windows PC LAN IP | `192.168.0.3` (UR30) |
 | Config method | systemd override | Default `config.py` values |
 | 24V power | Bench PSU | UR controller power block |
 
@@ -209,7 +209,7 @@ nc -zv <WINDOWS_IP> 30004
 
 ## 8. Configure Bridge for URSim
 
-The bridge daemon defaults to `--host 192.168.1.100` (the prod UR30 IP). Override this for dev.
+The bridge daemon defaults to `--host 192.168.0.3` (the prod UR30 IP). Override this for dev.
 
 ### Option A: Systemd override (persistent across reboots)
 
@@ -309,7 +309,7 @@ When dev bench testing passes and changes are ready for the real UR30:
    ./scripts/dev-sync.sh pi@w26-pi.local
    ```
 
-3. **No code changes needed.** The only difference is the systemd override — prod uses the default `--host 192.168.1.100`, dev uses `--host <WINDOWS_IP>`.
+3. **No code changes needed.** The only difference is the systemd override — prod uses the default `--host 192.168.0.3`, dev uses `--host <WINDOWS_IP>`.
 
 ---
 

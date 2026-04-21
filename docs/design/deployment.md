@@ -285,7 +285,7 @@ Deployed to `/etc/systemd/system/w26-bridge.service` on the Pi.
 | klippy socket never appears | ExecStartPre warning in journal, bridge starts but logs "Klipper connection failed" every 2s | Check `systemctl status klipper`; fix Klipper issues first |
 | Bridge crashes on import | `ModuleNotFoundError: No module named 'rtde_receive'` | `ur-rtde` not installed in the virtualenv; run deployment script |
 | Bridge hits start limit | `systemctl status w26-bridge` shows "start-limit-hit" | Fix the underlying error, then `sudo systemctl reset-failed w26-bridge && sudo systemctl start w26-bridge` |
-| UR30 not reachable | Bridge logs "RTDE connection failed" every 2s | Verify network: `ping 192.168.1.100`; check UR30 is powered on and running a program |
+| UR30 not reachable | Bridge logs "RTDE connection failed" every 2s | Verify network: `ping 192.168.0.3`; check UR30 is powered on and running a program |
 | Wrong Python path | `ExecStart` fails immediately | Verify virtualenv location: `ls /home/pi/klippy-env/bin/python` |
 
 ### 3.7 Maintenance
@@ -615,9 +615,9 @@ sudo tee -a /etc/dhcpcd.conf << 'EOF'
 
 # W26 Static IP
 interface eth0
-static ip_address=192.168.1.50/24
-static routers=192.168.1.1
-static domain_name_servers=192.168.1.1
+static ip_address=192.168.0.50/24
+static routers=192.168.0.1
+static domain_name_servers=192.168.0.1
 EOF
 
 sudo systemctl restart dhcpcd
@@ -627,9 +627,9 @@ sudo systemctl restart dhcpcd
 # For NetworkManager-based systems (Raspberry Pi OS Bookworm):
 sudo nmcli con mod "Wired connection 1" \
     ipv4.method manual \
-    ipv4.addresses 192.168.1.50/24 \
-    ipv4.gateway 192.168.1.1 \
-    ipv4.dns 192.168.1.1
+    ipv4.addresses 192.168.0.50/24 \
+    ipv4.gateway 192.168.0.1 \
+    ipv4.dns 192.168.0.1
 sudo nmcli con up "Wired connection 1"
 ```
 
@@ -637,9 +637,9 @@ sudo nmcli con up "Wired connection 1"
 
 | Device | IP Address | Notes |
 |--------|-----------|-------|
-| UR30 Controller | 192.168.1.100 | Set via teach pendant (Installation > Network) |
-| Pi (Klipper host) | 192.168.1.50 | Static or DHCP reservation |
-| Pi400 (HMI) | 192.168.1.51 (or DHCP) | Optional |
+| UR30 Controller | 192.168.0.3 | Set via teach pendant (Installation > Network) |
+| Pi (Klipper host) | 192.168.0.50 | Static or DHCP reservation |
+| Pi400 (HMI) | 192.168.0.51 (or DHCP) | Optional |
 | Subnet mask | 255.255.255.0 | /24 |
 
 All devices must be on the same subnet. If a gigabit switch is used, no special switch configuration is needed.
@@ -648,7 +648,7 @@ All devices must be on the same subnet. If a gigabit switch is used, no special 
 
 ```bash
 # From the Pi:
-ping -c3 192.168.1.100    # UR30 should respond
+ping -c3 192.168.0.3    # UR30 should respond
 ```
 
 ### 5.5 Step 3: Clone the Repository
@@ -818,7 +818,7 @@ If you need to allow access from the Pi400 or other devices, check `~/printer_da
 [authorization]
 trusted_clients:
     127.0.0.1
-    192.168.1.0/24
+    192.168.0.0/24
 cors_domains:
     *
 ```
@@ -829,7 +829,7 @@ Open `http://w26-pi.local/` in a browser from the Pi400. The Mainsail dashboard 
 
 ### 5.10 Step 8: End-to-End Verification
 
-This step requires the UR30 to be powered on and reachable at `192.168.1.100` (or the IP configured in `src/bridge/config.py`).
+This step requires the UR30 to be powered on and reachable at `192.168.0.3` (or the IP configured in `src/bridge/config.py`).
 
 1. Ensure a URScript program is loaded on the UR30 that writes to the RTDE output registers (e.g., `src/urscript/extrusion_control.script` or a test program).
 
@@ -841,8 +841,8 @@ This step requires the UR30 to be powered on and reachable at `192.168.1.100` (o
 
 3. Expected log output:
    ```
-   HH:MM:SS [bridge] INFO: Connecting to UR30 at 192.168.1.100:30004 ...
-   HH:MM:SS [bridge] INFO: RTDE connected to 192.168.1.100
+   HH:MM:SS [bridge] INFO: Connecting to UR30 at 192.168.0.3:30004 ...
+   HH:MM:SS [bridge] INFO: RTDE connected to 192.168.0.3
    HH:MM:SS [bridge] INFO: Connected to klippy at /tmp/klippy_uds
    HH:MM:SS [bridge] INFO: Klipper state: Printer is ready
    HH:MM:SS [bridge] INFO: Bridge running at 125 Hz (dry_run=False)
@@ -857,7 +857,7 @@ This step requires the UR30 to be powered on and reachable at `192.168.1.100` (o
 | Mainsail shows "Klipper not connected" | Klipper service not running or crashed | `sudo systemctl restart klipper`; check `cat /tmp/klippy.log` |
 | `MCU protocol error` in klippy.log | Firmware version mismatch | Reflash SKR Pico (Step 4) after `cd ~/klipper && git pull && make` |
 | `Unable to read tmc uart` warnings | TMC2209 UART wiring or address issue | Verify `uart_pin`, `tx_pin`, `uart_address` in `printer.cfg` match hardware |
-| Bridge shows "RTDE connection failed" | UR30 not reachable or not running a program | `ping 192.168.1.100`; ensure UR30 program is running |
+| Bridge shows "RTDE connection failed" | UR30 not reachable or not running a program | `ping 192.168.0.3`; ensure UR30 program is running |
 | Bridge shows "Klipper connection failed" | klippy socket missing | `systemctl status klipper`; check if `/tmp/klippy_uds` exists |
 | Bridge shows "ur_rtde not installed -- using stub" | `ur-rtde` package not installed or build failed | Re-run `pip install ur-rtde`; check Boost is installed |
 | Stepper motor does not move but bridge logs look correct | Stepper current too low or wiring issue | Check TMC2209 `run_current` in `printer.cfg`; check step/dir/enable wiring |
@@ -873,7 +873,7 @@ This step requires the UR30 to be powered on and reachable at `192.168.1.100` (o
                     Gigabit Switch (or direct cable)
                    /           |             \
             UR30             Pi              Pi400
-         192.168.1.100    192.168.1.50    192.168.1.51
+         192.168.0.3    192.168.0.50    192.168.0.51
           (robot)      (Klipper host)      (HMI)
                           port 30004 <-- RTDE
                           port 7125 --> Moonraker
@@ -962,7 +962,7 @@ Klipper host and MCU firmware must always be from the same git commit. Mismatche
 
 1. Edit `src/bridge/config.py`:
    ```python
-   UR30_HOST = "192.168.1.XXX"    # new IP
+   UR30_HOST = "192.168.0.XXX"    # new IP
    ```
 2. Restart the bridge:
    ```bash
@@ -973,7 +973,7 @@ Alternatively, override at runtime without editing the config file:
 
 Edit the systemd service file to pass `--host`:
 ```ini
-ExecStart=/home/pi/klippy-env/bin/python -m bridge --host 192.168.1.XXX
+ExecStart=/home/pi/klippy-env/bin/python -m bridge --host 192.168.0.XXX
 ```
 
 ### 8.4 Viewing Logs

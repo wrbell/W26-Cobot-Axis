@@ -15,7 +15,7 @@ Enhancements (see docs/design/bridge_enhancements.md):
 
 Usage:
     python -m bridge.bridge_daemon
-    python -m bridge.bridge_daemon --host 192.168.1.100 --dry-run
+    python -m bridge.bridge_daemon --host 192.168.0.3 --dry-run
     python -m bridge.bridge_daemon --log --extrusion-source bridge --dashboard
 
 Reference: docs/register_allocation.md for register mapping.
