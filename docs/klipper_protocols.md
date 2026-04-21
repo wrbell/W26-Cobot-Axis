@@ -323,7 +323,7 @@ For our project, configuring the Pi400's IP and the UR30's IP as trusted clients
 [authorization]
 trusted_clients:
     127.0.0.1
-    192.168.1.0/24
+    192.168.0.0/24
 cors_domains:
     *
 ```
@@ -785,8 +785,8 @@ The central piece of custom software is a **Python bridge daemon** running on th
 import ur_rtde
 import klippy_socket
 
-rtde = ur_rtde.RTDEReceive("192.168.1.100")  # UR30 IP
-rtde_io = ur_rtde.RTDEIOInterface("192.168.1.100")
+rtde = ur_rtde.RTDEReceive("192.168.0.3")  # UR30 IP
+rtde_io = ur_rtde.RTDEIOInterface("192.168.0.3")
 klipper = klippy_socket.connect("/tmp/klippy_uds")
 
 # Subscribe to stepper status

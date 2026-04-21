@@ -6,7 +6,7 @@
 # deploy.sh run (~5 seconds on LAN vs minutes).
 #
 # Usage: bash scripts/dev-sync.sh [PI_HOST]
-# Example: bash scripts/dev-sync.sh pi@192.168.1.50
+# Example: bash scripts/dev-sync.sh pi@192.168.0.50
 
 set -euo pipefail
 

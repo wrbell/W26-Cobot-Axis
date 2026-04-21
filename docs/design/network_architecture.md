@@ -47,7 +47,7 @@ All networked devices connect to a single unmanaged gigabit Ethernet switch. An 
            | UR30 |    |  Pi   |    | Pi400  |
            | Ctrl |    |(headl)|    | (HMI)  |
            +------+    +---+---+    +--------+
-         192.168.1.100   192.168.1.50  192.168.1.51
+         192.168.0.3   192.168.0.50  192.168.0.51
           (static)       (static)     (DHCP or static)
                            |
                       USB Serial
@@ -83,7 +83,7 @@ Pi400 (HMI/dev)                      UR30 Controller
 
 ### 1.3 Network Segment
 
-All devices reside on a single flat Layer 2 segment: `192.168.1.0/24`. No VLANs, no routing between subnets. The switch is unmanaged and requires no configuration. Any 5-port (or larger) gigabit switch is sufficient -- there are no special requirements for QoS, IGMP, or spanning tree.
+All devices reside on a single flat Layer 2 segment: `192.168.0.0/24`. No VLANs, no routing between subnets. The switch is unmanaged and requires no configuration. Any 5-port (or larger) gigabit switch is sufficient -- there are no special requirements for QoS, IGMP, or spanning tree.
 
 **Minimum switch port count:** 3 (UR30, Pi, Pi400). A 5-port switch is recommended to leave room for a laptop or additional diagnostic device.
 
@@ -95,20 +95,20 @@ All devices reside on a single flat Layer 2 segment: `192.168.1.0/24`. No VLANs,
 
 | Device | Hostname | IP Address | Assignment | MAC (example) | Notes |
 |--------|----------|-----------|------------|---------------|-------|
-| UR30 Controller | ur30 | 192.168.1.100 | Static (set on teach pendant) | -- | Must not change; hardcoded in `src/bridge/config.py` |
-| Pi (headless) | w26-pi | 192.168.1.50 | Static (set in OS config) | -- | Klipper host + RTDE bridge |
-| Pi400 (HMI) | w26-pi400 | 192.168.1.51 | DHCP or static | -- | Optional; system works without it |
-| Gateway / router | -- | 192.168.1.1 | -- | -- | Only needed if lab uplink exists |
+| UR30 Controller | ur30 | 192.168.0.3 | Static (set on teach pendant) | -- | Must not change; hardcoded in `src/bridge/config.py` |
+| Pi (headless) | w26-pi | 192.168.0.50 | Static (set in OS config) | -- | Klipper host + RTDE bridge |
+| Pi400 (HMI) | w26-pi400 | 192.168.0.51 | DHCP or static | -- | Optional; system works without it |
+| Gateway / router | -- | 192.168.0.1 | -- | -- | Only needed if lab uplink exists |
 
 ### 2.2 Subnet Configuration
 
 | Parameter | Value |
 |-----------|-------|
-| Network | 192.168.1.0/24 |
+| Network | 192.168.0.0/24 |
 | Subnet mask | 255.255.255.0 |
-| Usable host range | 192.168.1.1 -- 192.168.1.254 |
-| Default gateway | 192.168.1.1 (if lab uplink present; omit if isolated) |
-| DNS servers | 192.168.1.1 (lab router) or none (use `/etc/hosts` on Pi) |
+| Usable host range | 192.168.0.1 -- 192.168.0.254 |
+| Default gateway | 192.168.0.1 (if lab uplink present; omit if isolated) |
+| DNS servers | 192.168.0.1 (lab router) or none (use `/etc/hosts` on Pi) |
 
 ### 2.3 Static vs. DHCP Decision
 
@@ -124,11 +124,11 @@ To avoid conflicts with lab equipment or DHCP pools, the W26 project uses addres
 
 | Range | Purpose |
 |-------|---------|
-| 192.168.1.1 | Lab gateway (if present) |
-| 192.168.1.2 -- 192.168.1.49 | Available for lab DHCP pool |
-| 192.168.1.50 -- 192.168.1.59 | W26 project devices (Pi, Pi400, future) |
-| 192.168.1.100 | UR30 controller |
-| 192.168.1.101 -- 192.168.1.254 | Available / lab equipment |
+| 192.168.0.1 | Lab gateway (if present) |
+| 192.168.0.2 -- 192.168.0.49 | Available for lab DHCP pool |
+| 192.168.0.50 -- 192.168.0.59 | W26 project devices (Pi, Pi400, future) |
+| 192.168.0.3 | UR30 controller |
+| 192.168.0.101 -- 192.168.0.254 | Available / lab equipment |
 
 ---
 
@@ -170,16 +170,16 @@ The UR30 controller exposes several TCP services. Only RTDE and Dashboard are us
 
 ### 3.4 Moonraker / Mainsail Ports
 
-Moonraker listens on port 7125 for both HTTP REST and WebSocket connections. Mainsail is a static single-page application served by nginx on port 80. When a browser on the Pi400 loads `http://192.168.1.50/`, nginx serves the Mainsail JavaScript, which then opens a WebSocket to `ws://192.168.1.50:7125/websocket` for live Klipper status.
+Moonraker listens on port 7125 for both HTTP REST and WebSocket connections. Mainsail is a static single-page application served by nginx on port 80. When a browser on the Pi400 loads `http://192.168.0.50/`, nginx serves the Mainsail JavaScript, which then opens a WebSocket to `ws://192.168.0.50:7125/websocket` for live Klipper status.
 
 **Traffic flow:**
 
 ```
 Pi400 Browser
   |
-  |-- GET http://192.168.1.50/ ------> Pi nginx (port 80) --> Mainsail static files
+  |-- GET http://192.168.0.50/ ------> Pi nginx (port 80) --> Mainsail static files
   |
-  |-- WS  ws://192.168.1.50:7125/websocket --> Pi Moonraker (port 7125) --> klippy UDS
+  |-- WS  ws://192.168.0.50:7125/websocket --> Pi Moonraker (port 7125) --> klippy UDS
 ```
 
 ### 3.5 UDP Ports
@@ -203,10 +203,10 @@ The UR30's IP is configured via the teach pendant:
 3. Select the Ethernet interface.
 4. Set the method to **Static**.
 5. Enter:
-   - **IP Address:** `192.168.1.100`
+   - **IP Address:** `192.168.0.3`
    - **Subnet Mask:** `255.255.255.0`
-   - **Gateway:** `192.168.1.1` (or leave blank if no internet needed)
-   - **DNS:** `192.168.1.1` (or leave blank)
+   - **Gateway:** `192.168.0.1` (or leave blank if no internet needed)
+   - **DNS:** `192.168.0.1` (or leave blank)
 6. Tap **Apply**.
 7. The controller may require a restart for network changes to take effect.
 
@@ -225,13 +225,13 @@ From the Pi, verify connectivity to the UR30:
 
 ```bash
 # Basic connectivity
-ping -c 3 192.168.1.100
+ping -c 3 192.168.0.3
 
 # RTDE port open
-nc -zv 192.168.1.100 30004
+nc -zv 192.168.0.3 30004
 
 # Dashboard port open
-nc -zv 192.168.1.100 29999
+nc -zv 192.168.0.3 29999
 ```
 
 From the teach pendant, the network settings page shows the current IP, link status, and speed.
@@ -254,9 +254,9 @@ MainsailOS and older Raspberry Pi OS releases use `dhcpcd` for network managemen
 ```bash
 # W26 Cobot Axis -- Static IP for headless Pi
 interface eth0
-static ip_address=192.168.1.50/24
-static routers=192.168.1.1
-static domain_name_servers=192.168.1.1
+static ip_address=192.168.0.50/24
+static routers=192.168.0.1
+static domain_name_servers=192.168.0.1
 ```
 
 Apply the change:
@@ -269,7 +269,7 @@ Verify:
 
 ```bash
 ip addr show eth0
-# Should show: inet 192.168.1.50/24
+# Should show: inet 192.168.0.50/24
 ```
 
 ### 5.2 Static IP via NetworkManager (Raspberry Pi OS Bookworm)
@@ -279,9 +279,9 @@ Raspberry Pi OS Bookworm uses NetworkManager by default. Configure a static IP w
 ```bash
 sudo nmcli con mod "Wired connection 1" \
     ipv4.method manual \
-    ipv4.addresses 192.168.1.50/24 \
-    ipv4.gateway 192.168.1.1 \
-    ipv4.dns 192.168.1.1
+    ipv4.addresses 192.168.0.50/24 \
+    ipv4.gateway 192.168.0.1 \
+    ipv4.dns 192.168.0.1
 
 sudo nmcli con up "Wired connection 1"
 ```
@@ -309,13 +309,13 @@ network:
     eth0:
       dhcp4: false
       addresses:
-        - 192.168.1.50/24
+        - 192.168.0.50/24
       routes:
         - to: default
-          via: 192.168.1.1
+          via: 192.168.0.1
       nameservers:
         addresses:
-          - 192.168.1.1
+          - 192.168.0.1
 ```
 
 Apply:
@@ -326,7 +326,7 @@ sudo netplan apply
 
 ### 5.4 DHCP with Reservation (Alternative)
 
-If using DHCP for simplicity during development, configure a DHCP reservation on the lab router so the Pi always receives `192.168.1.50`. This requires access to the router's DHCP settings and the Pi's MAC address:
+If using DHCP for simplicity during development, configure a DHCP reservation on the lab router so the Pi always receives `192.168.0.50`. This requires access to the router's DHCP settings and the Pi's MAC address:
 
 ```bash
 # Find the Pi's MAC address:
@@ -335,7 +335,7 @@ ip link show eth0 | grep ether
 
 ### 5.5 Pi400 Network Configuration
 
-The Pi400 is optional and does not require a specific IP. It can use DHCP. If a static IP is desired, use `192.168.1.51` with the same methods described above.
+The Pi400 is optional and does not require a specific IP. It can use DHCP. If a static IP is desired, use `192.168.0.51` with the same methods described above.
 
 ---
 
@@ -353,26 +353,26 @@ If `ufw` (Uncomplicated Firewall) or `iptables` rules are added to the Pi, the f
 
 | Port | Protocol | Source | Purpose | Rule |
 |------|----------|--------|---------|------|
-| 22 | TCP | 192.168.1.0/24 | SSH | `sudo ufw allow from 192.168.1.0/24 to any port 22` |
-| 80 | TCP | 192.168.1.0/24 | Mainsail web UI | `sudo ufw allow from 192.168.1.0/24 to any port 80` |
-| 7125 | TCP | 192.168.1.0/24 | Moonraker API | `sudo ufw allow from 192.168.1.0/24 to any port 7125` |
+| 22 | TCP | 192.168.0.0/24 | SSH | `sudo ufw allow from 192.168.0.0/24 to any port 22` |
+| 80 | TCP | 192.168.0.0/24 | Mainsail web UI | `sudo ufw allow from 192.168.0.0/24 to any port 80` |
+| 7125 | TCP | 192.168.0.0/24 | Moonraker API | `sudo ufw allow from 192.168.0.0/24 to any port 7125` |
 | 5353 | UDP | 224.0.0.251 (multicast) | mDNS | `sudo ufw allow 5353/udp` |
 
 **Outbound (traffic leaving the Pi):**
 
 | Port | Protocol | Destination | Purpose | Rule |
 |------|----------|-------------|---------|------|
-| 30004 | TCP | 192.168.1.100 | RTDE | Outbound is allowed by default in ufw |
-| 29999 | TCP | 192.168.1.100 | Dashboard | Outbound is allowed by default in ufw |
+| 30004 | TCP | 192.168.0.3 | RTDE | Outbound is allowed by default in ufw |
+| 29999 | TCP | 192.168.0.3 | Dashboard | Outbound is allowed by default in ufw |
 
 **Example ufw setup:**
 
 ```bash
 sudo ufw default deny incoming
 sudo ufw default allow outgoing
-sudo ufw allow from 192.168.1.0/24 to any port 22 proto tcp
-sudo ufw allow from 192.168.1.0/24 to any port 80 proto tcp
-sudo ufw allow from 192.168.1.0/24 to any port 7125 proto tcp
+sudo ufw allow from 192.168.0.0/24 to any port 22 proto tcp
+sudo ufw allow from 192.168.0.0/24 to any port 80 proto tcp
+sudo ufw allow from 192.168.0.0/24 to any port 7125 proto tcp
 sudo ufw allow 5353/udp
 sudo ufw enable
 ```
@@ -409,8 +409,8 @@ The Pi and Pi400 both run Avahi (mDNS/DNS-SD daemon), which is installed by defa
 
 | Hostname | Resolves To | Used For |
 |----------|-------------|----------|
-| `w26-pi.local` | 192.168.1.50 | SSH from Pi400, Mainsail in browser |
-| `w26-pi400.local` | 192.168.1.51 | SSH from Pi to Pi400 (optional) |
+| `w26-pi.local` | 192.168.0.50 | SSH from Pi400, Mainsail in browser |
+| `w26-pi400.local` | 192.168.0.51 | SSH from Pi to Pi400 (optional) |
 
 **Setting the hostname on the Pi:**
 
@@ -422,7 +422,7 @@ After reboot, the Pi advertises `w26-pi.local` via mDNS.
 
 **Limitations of mDNS:**
 
-- The UR30 **does not support mDNS**. It cannot resolve `.local` hostnames. Always use the numeric IP (`192.168.1.50`) in URScript and in `config.py`.
+- The UR30 **does not support mDNS**. It cannot resolve `.local` hostnames. Always use the numeric IP (`192.168.0.50`) in URScript and in `config.py`.
 - mDNS requires multicast traffic. If the switch blocks multicast (some managed switches do by default), mDNS will fail. Unmanaged switches pass multicast traffic transparently.
 - mDNS resolution can take 1--3 seconds on first lookup. This is fine for SSH and browser access but should not be used in the real-time data path.
 
@@ -436,9 +436,9 @@ As a belt-and-suspenders approach, add static entries to `/etc/hosts` on both th
 127.0.0.1       localhost
 ::1             localhost
 
-192.168.1.100   ur30
-192.168.1.50    w26-pi
-192.168.1.51    w26-pi400
+192.168.0.3   ur30
+192.168.0.50    w26-pi
+192.168.0.51    w26-pi400
 ```
 
 **On the Pi400 (`/etc/hosts`):**
@@ -447,9 +447,9 @@ As a belt-and-suspenders approach, add static entries to `/etc/hosts` on both th
 127.0.0.1       localhost
 ::1             localhost
 
-192.168.1.100   ur30
-192.168.1.50    w26-pi
-192.168.1.51    w26-pi400
+192.168.0.3   ur30
+192.168.0.50    w26-pi
+192.168.0.51    w26-pi400
 ```
 
 This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS is not working.
@@ -458,9 +458,9 @@ This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS i
 
 | Context | Resolution Method |
 |---------|-------------------|
-| Bridge daemon connecting to UR30 | **Numeric IP** (`192.168.1.100`) in `config.py`. Never use hostnames in the real-time path. |
+| Bridge daemon connecting to UR30 | **Numeric IP** (`192.168.0.3`) in `config.py`. Never use hostnames in the real-time path. |
 | SSH from Pi400 to Pi | **mDNS** (`w26-pi.local`) or numeric IP. Either works. |
-| Mainsail in browser (Pi400) | **mDNS** (`http://w26-pi.local/`) or numeric IP (`http://192.168.1.50/`). Bookmark the numeric IP as a fallback. |
+| Mainsail in browser (Pi400) | **mDNS** (`http://w26-pi.local/`) or numeric IP (`http://192.168.0.50/`). Bookmark the numeric IP as a fallback. |
 | URScript socket functions (if used) | **Numeric IP** only. URScript does not resolve hostnames. |
 
 ---
@@ -469,24 +469,24 @@ This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS i
 
 ### 8.1 Cannot Reach UR30 from Pi
 
-**Symptom:** `ping 192.168.1.100` fails or `nc -zv 192.168.1.100 30004` times out.
+**Symptom:** `ping 192.168.0.3` fails or `nc -zv 192.168.0.3 30004` times out.
 
 | Check | Command | Expected |
 |-------|---------|----------|
-| Pi has correct IP | `ip addr show eth0` | Shows `192.168.1.50/24` |
+| Pi has correct IP | `ip addr show eth0` | Shows `192.168.0.50/24` |
 | Pi has link up | `ip link show eth0` | Shows `state UP` |
 | Ethernet cable connected | `ethtool eth0` | Shows `Link detected: yes` |
 | UR30 is powered on | Visual check | Teach pendant shows PolyScope |
-| UR30 is on correct subnet | Teach pendant: Settings > System > Network | Shows `192.168.1.100/24` |
+| UR30 is on correct subnet | Teach pendant: Settings > System > Network | Shows `192.168.0.3/24` |
 | Switch has link on both ports | LED indicators on switch | Solid/blinking link LEDs for both ports |
-| ARP table shows UR30 | `arp -n` or `ip neigh` | Entry for `192.168.1.100` |
+| ARP table shows UR30 | `arp -n` or `ip neigh` | Entry for `192.168.0.3` |
 
 **Common causes:**
 
-- **Wrong subnet:** The UR30 is on `192.168.0.x` instead of `192.168.1.x` (or vice versa). Both devices must be on the same `/24` subnet.
+- **Wrong subnet:** The UR30 is on a different `/24` subnet than the Pi. Both devices must share the same subnet.
 - **Cable issue:** Try a different Ethernet cable. Check that both ends are fully seated.
 - **UR30 not fully booted:** The UR30 takes 60--90 seconds to boot. The network interface may not respond during early boot.
-- **IP conflict:** Another device on the network has `192.168.1.100`. Check with `arping -D 192.168.1.100`.
+- **IP conflict:** Another device on the network has `192.168.0.3`. Check with `arping -D 192.168.0.3`.
 
 ### 8.2 RTDE Connection Timeout
 
@@ -494,7 +494,7 @@ This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS i
 
 | Check | Command | Expected |
 |-------|---------|----------|
-| Port 30004 is reachable | `nc -zv 192.168.1.100 30004` | `Connection to 192.168.1.100 30004 port [tcp/*] succeeded!` |
+| Port 30004 is reachable | `nc -zv 192.168.0.3 30004` | `Connection to 192.168.0.3 30004 port [tcp/*] succeeded!` |
 | UR30 program is running | Teach pendant | Program state: Running |
 | RTDE is not disabled | Teach pendant: Settings > System > Remote Control | RTDE enabled |
 | No other RTDE client connected | Check for other running instances | Only one bridge daemon should run |
@@ -508,33 +508,33 @@ This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS i
 
 ### 8.3 Moonraker / Mainsail Unreachable from Pi400
 
-**Symptom:** `http://192.168.1.50/` does not load in the Pi400's browser.
+**Symptom:** `http://192.168.0.50/` does not load in the Pi400's browser.
 
 | Check | Command (on Pi400) | Expected |
 |-------|---------------------|----------|
-| Pi is reachable | `ping 192.168.1.50` | Replies |
-| Port 80 open on Pi | `nc -zv 192.168.1.50 80` | Succeeded |
-| Port 7125 open on Pi | `nc -zv 192.168.1.50 7125` | Succeeded |
+| Pi is reachable | `ping 192.168.0.50` | Replies |
+| Port 80 open on Pi | `nc -zv 192.168.0.50 80` | Succeeded |
+| Port 7125 open on Pi | `nc -zv 192.168.0.50 7125` | Succeeded |
 | nginx running on Pi | `ssh pi@w26-pi systemctl status nginx` | Active |
 | Moonraker running on Pi | `ssh pi@w26-pi systemctl status moonraker` | Active |
 
 **Common causes:**
 
 - **nginx not installed or not running:** MainsailOS includes nginx. If using a manual install, ensure `sudo apt-get install nginx` was run and the Mainsail static files are deployed.
-- **Moonraker authorization:** If Moonraker's `[authorization]` section does not include `192.168.1.0/24` in `trusted_clients`, the Pi400 may be blocked. See `moonraker.conf`:
+- **Moonraker authorization:** If Moonraker's `[authorization]` section does not include `192.168.0.0/24` in `trusted_clients`, the Pi400 may be blocked. See `moonraker.conf`:
 
   ```ini
   [authorization]
   trusted_clients:
       127.0.0.1
-      192.168.1.0/24
+      192.168.0.0/24
   ```
 
 - **Browser WebSocket issue:** Mainsail connects via WebSocket to port 7125. If port 80 works but the Mainsail UI shows "Moonraker not connected," the WebSocket connection (port 7125) is failing. Check the browser developer console for errors.
 
 ### 8.4 SSH Connection Refused
 
-**Symptom:** `ssh pi@192.168.1.50` returns `Connection refused`.
+**Symptom:** `ssh pi@192.168.0.50` returns `Connection refused`.
 
 | Check | Notes |
 |-------|-------|
@@ -544,7 +544,7 @@ This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS i
 
 ### 8.5 mDNS (.local) Not Resolving
 
-**Symptom:** `ping w26-pi.local` fails but `ping 192.168.1.50` works.
+**Symptom:** `ping w26-pi.local` fails but `ping 192.168.0.50` works.
 
 | Check | Notes |
 |-------|-------|
@@ -562,8 +562,8 @@ This allows using short names like `ssh pi@w26-pi` or `ping ur30` even if mDNS i
 | Check | Tool | Expected |
 |-------|------|----------|
 | Link speed is gigabit | `ethtool eth0` | `Speed: 1000Mb/s` |
-| No packet loss | `ping -c 1000 -i 0.002 192.168.1.100` | 0% packet loss |
-| No excessive latency | `ping -c 100 192.168.1.100` | avg < 1 ms |
+| No packet loss | `ping -c 1000 -i 0.002 192.168.0.3` | 0% packet loss |
+| No excessive latency | `ping -c 100 192.168.0.3` | avg < 1 ms |
 | Switch not overloaded | Check switch port LEDs | No collision/error LEDs |
 | No bandwidth hog on the network | `iftop` on Pi | RTDE traffic should be < 1 Mbps |
 
@@ -601,14 +601,14 @@ Moonraker uses `trusted_clients` (IP-based allowlisting) rather than username/pa
 - Modify `printer.cfg`
 - Restart Klipper
 
-**Mitigation:** Limit `trusted_clients` in `moonraker.conf` to the project subnet (`192.168.1.0/24`). If the switch is connected to a broader network, restrict to specific IPs:
+**Mitigation:** Limit `trusted_clients` in `moonraker.conf` to the project subnet (`192.168.0.0/24`). If the switch is connected to a broader network, restrict to specific IPs:
 
 ```ini
 [authorization]
 trusted_clients:
     127.0.0.1
-    192.168.1.50
-    192.168.1.51
+    192.168.0.50
+    192.168.0.51
 ```
 
 ### 9.4 SSH Hardening (Optional)
@@ -621,7 +621,7 @@ For a lab project, password-based SSH is acceptable. If the Pi will be accessibl
    ssh-keygen -t ed25519 -C "w26-pi400"
 
    # Copy public key to Pi:
-   ssh-copy-id pi@192.168.1.50
+   ssh-copy-id pi@192.168.0.50
 
    # Then on Pi, disable password auth:
    # Edit /etc/ssh/sshd_config:
@@ -659,25 +659,25 @@ For a lab project, password-based SSH is acceptable. If the Pi will be accessibl
 ## Appendix A: Quick Reference Card
 
 ```
-NETWORK:          192.168.1.0/24  (single flat subnet)
+NETWORK:          192.168.0.0/24  (single flat subnet)
 SWITCH:           Unmanaged gigabit, 5+ ports
 
-UR30:             192.168.1.100   (static, set on teach pendant)
+UR30:             192.168.0.3   (static, set on teach pendant)
                   Ports: 30004 (RTDE), 29999 (Dashboard)
 
-Pi (headless):    192.168.1.50    (static, set in /etc/dhcpcd.conf or nmcli)
+Pi (headless):    192.168.0.50    (static, set in /etc/dhcpcd.conf or nmcli)
   hostname:       w26-pi
   Ports IN:       22 (SSH), 80 (Mainsail), 7125 (Moonraker)
   Ports OUT:      30004 (RTDE to UR30), 29999 (Dashboard to UR30)
   Local only:     /tmp/klippy_uds (Unix socket), USB serial to SKR Pico
 
-Pi400 (HMI):     192.168.1.51    (DHCP or static)
+Pi400 (HMI):     192.168.0.51    (DHCP or static)
   hostname:       w26-pi400
   Ports OUT:      22 (SSH to Pi), 80 (Mainsail), 7125 (Moonraker)
 
-VERIFY:           ping 192.168.1.100     (UR30 reachable?)
-                  nc -zv 192.168.1.100 30004  (RTDE port open?)
-                  nc -zv 192.168.1.50 7125    (Moonraker reachable?)
+VERIFY:           ping 192.168.0.3     (UR30 reachable?)
+                  nc -zv 192.168.0.3 30004  (RTDE port open?)
+                  nc -zv 192.168.0.50 7125    (Moonraker reachable?)
                   ssh pi@w26-pi.local         (SSH works?)
 ```
 

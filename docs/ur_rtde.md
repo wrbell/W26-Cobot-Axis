@@ -155,7 +155,7 @@ The official library uses XML configuration files to define recipes. Here is the
 import rtde.rtde as rtde
 import rtde.rtde_config as rtde_config
 
-ROBOT_HOST = "192.168.1.100"  # UR30 IP address
+ROBOT_HOST = "192.168.0.3"  # UR30 IP address
 ROBOT_PORT = 30004
 CONFIG_FILE = "rtde_configuration.xml"
 
@@ -232,7 +232,7 @@ import rtde_receive
 import time
 
 # Connect to robot and subscribe to state data
-rtde_r = rtde_receive.RTDEReceiveInterface("192.168.1.100")
+rtde_r = rtde_receive.RTDEReceiveInterface("192.168.0.3")
 
 while True:
     # Read current joint positions (radians)
@@ -263,10 +263,10 @@ import rtde_control
 import rtde_io
 
 # Control interface (also writes registers)
-rtde_c = rtde_control.RTDEControlInterface("192.168.1.100")
+rtde_c = rtde_control.RTDEControlInterface("192.168.0.3")
 
 # IO interface
-rtde_io_ctrl = rtde_io.RTDEIOInterface("192.168.1.100")
+rtde_io_ctrl = rtde_io.RTDEIOInterface("192.168.0.3")
 
 # Write to general-purpose integer register (accessible in URScript)
 rtde_c.setInputIntRegister(0, 100)       # write_input_integer_register(0) in URScript

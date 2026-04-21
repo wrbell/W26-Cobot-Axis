@@ -293,7 +293,7 @@ Ref: Dr. Pannier's layout guidance in `todo.md`
 
 | Config File | Key Setting | Current Value | Action |
 |-------------|------------|---------------|--------|
-| `src/bridge/config.py:11` | `UR30_HOST` | `192.168.1.100` | Update to actual UR30 IP |
+| `src/bridge/config.py:11` | `UR30_HOST` | `192.168.0.3` | Update to actual UR30 IP |
 | `src/klipper/printer.cfg:13` | `[mcu] serial` | `PLACEHOLDER` | Auto-set by `deploy.sh` |
 | `src/klipper/printer.cfg:~30` | `rotation_distance` | `40` | Calibrate to pump displacement |
 | `src/klipper/printer.cfg:~50` | `run_current` | `0.580` | Tune to motor rating |

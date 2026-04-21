@@ -466,8 +466,8 @@ Windows Laptop (x86-64)          Raspberry Pi              SKR Pico (RP2040)
 ### 6.3 Network Configuration
 
 - Windows and Pi must be on the same LAN (or connected via direct ethernet cable).
-- Find Windows IP: `ipconfig` → note IPv4 address (e.g., `192.168.1.100`).
-- Find Pi IP: `hostname -I` on Pi (e.g., `192.168.1.50`).
+- Find Windows IP: `ipconfig` → note IPv4 address (e.g., `192.168.0.3`).
+- Find Pi IP: `hostname -I` on Pi (e.g., `192.168.0.50`).
 - Bridge daemon config: point `--host` at the Windows IP where URSim listens.
 
 **Bridge daemon launch for dev bench:**
@@ -553,7 +553,7 @@ Used during active development for fast code-change cycles. Runs in under 5 seco
 bash scripts/dev-sync.sh
 
 # Sync to specific Pi
-bash scripts/dev-sync.sh pi@192.168.1.50
+bash scripts/dev-sync.sh pi@192.168.0.50
 ```
 
 This rsyncs `src/` to the Pi, restarts `w26-bridge`, copies `stallguard_monitor.py` into klippy extras, and restarts Klipper. Does **not** rebuild firmware — use full `deploy.sh` for firmware changes.

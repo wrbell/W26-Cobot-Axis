@@ -90,7 +90,7 @@ If bridge and URSim are on the same machine, use `127.0.0.1`.
 If on different machines:
 ```powershell
 ipconfig
-# Look for "IPv4 Address" under your active adapter (e.g., 192.168.1.50)
+# Look for "IPv4 Address" under your active adapter (e.g., 192.168.0.50)
 ```
 
 ---
@@ -136,7 +136,7 @@ CSV files go to `./logs/` (or specify `--log-dir path`).
 
 | Flag | Effect |
 |------|--------|
-| `--host IP` | UR30/URSim IP address (default: 192.168.1.100) |
+| `--host IP` | UR30/URSim IP address (default: 192.168.0.3) |
 | `--dry-run` | Skip Klipper connection, log commands instead of executing |
 | `--no-status-poll` | Disable TMC2209/StallGuard queries (no SKR Pico connected) |
 | `--no-watchdog` | Disable RTDE timestamp watchdog |

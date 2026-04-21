@@ -149,7 +149,7 @@ Written by the bridge daemon on the Pi, read by URScript on the UR30.
 | Parameter | Value |
 |-----------|-------|
 | Topology | UR30 controller, Pi, and Pi400 (optional) connected via gigabit switch |
-| UR30 IP | Configurable (default 192.168.1.100) |
+| UR30 IP | Configurable (default 192.168.0.3) |
 | Pi IP | Configurable (same subnet as UR30) |
 | Cable | Cat5e or Cat6, 1 -- 3 m |
 

@@ -139,7 +139,7 @@ StallGuard tuning requires running the motor under various loads and speeds. See
 | Environment | Host |
 |-------------|------|
 | Dev (URSim) | `--host <WINDOWS_IP>` |
-| Prod (UR30) | Default `192.168.1.100` |
+| Prod (UR30) | Default `192.168.0.3` |
 
 Already covered in `docs/dev_bench_guide.md` Section 8.
 
