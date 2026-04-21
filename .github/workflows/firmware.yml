@@ -43,7 +43,8 @@ jobs:
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: gcc-arm-none-eabi libnewlib-arm-none-eabi
-          version: 1.0
+          version: "2"
+          execute_install_scripts: true
 
       - name: Clone Klipper
         run: git clone --depth 1 https://github.com/Klipper3d/klipper.git
