@@ -1,0 +1,55 @@
+%% Figure 5 — Software Component Diagram
+%% src/bridge/ modules + Klipper host + MCU firmware
+
+flowchart TB
+    subgraph UR["URScript (UR30 teach pendant)"]
+        URS["extrusion_control.script<br/>+ test_basic.script"]
+    end
+
+    subgraph BD["Bridge daemon — src/bridge/ (Python 3, 11 modules, 479 tests)"]
+        direction TB
+        CFG["config.py<br/>(register maps, constants)"]
+        RTDE_C["rtde_client.py<br/>(ur-rtde wrapper)"]
+        KLIP["klipper_client.py<br/>(Unix socket JSON-RPC)"]
+        LOOP["bridge_daemon.py<br/>(125 Hz state machine)"]
+        WD["watchdog.py<br/>(500 ms RTDE timeout)"]
+        STAT["klipper_status.py<br/>(TMC2209 poll, 20 Hz)"]
+        PROF["extrusion_profile.py<br/>(linear / poly / LUT)"]
+        LOG["data_logger.py<br/>(CSV telemetry)"]
+        ACC["stallguard_accumulator.py<br/>(event buffer + CSV)"]
+        DASH["dashboard_client.py<br/>(UR Dashboard port 29999)"]
+        RTDE_C --> LOOP
+        KLIP --> LOOP
+        PROF --> LOOP
+        WD --> LOOP
+        STAT --> LOOP
+        ACC --> LOOP
+        LOOP --> LOG
+        DASH --> LOOP
+        CFG -.-> LOOP
+    end
+
+    subgraph HOST["Klipper host (klippy)"]
+        KGCODE["G-code interpreter<br/>+ motion planner<br/>+ 100 ms lookahead"]
+    end
+
+    subgraph MCU["Klipper firmware on SKR Pico (RP2040)"]
+        MCODE["Step timing,<br/>TMC2209 UART driver"]
+        SG["Core1 StallGuard monitor<br/>(stretch overlay)"]
+    end
+
+    URS ==>|"RTDE regs<br/>(500 Hz)"| RTDE_C
+    LOOP ==>|"MANUAL_STEPPER MOVE"| KLIP
+    KLIP ==>|"Unix socket<br/>/tmp/klippy_uds"| KGCODE
+    KGCODE ==>|"Klipper MCU<br/>binary proto"| MCODE
+    MCODE -.->|"DIAG pin IRQ"| SG
+    SG -.->|"MCU cmd"| STAT
+
+    classDef bridge fill:#e3f0df,stroke:#4a7a4a;
+    classDef host fill:#dfe9f4,stroke:#2e4e6e;
+    classDef mcu fill:#f4ecd8,stroke:#8a7a3a;
+    classDef ur fill:#f4dfdf,stroke:#8a4a4a;
+    class RTDE_C,KLIP,LOOP,WD,STAT,PROF,LOG,ACC,DASH,CFG bridge
+    class KGCODE host
+    class MCODE,SG mcu
+    class URS ur

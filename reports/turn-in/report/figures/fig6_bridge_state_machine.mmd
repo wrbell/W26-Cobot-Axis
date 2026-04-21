@@ -1,0 +1,20 @@
+%% Figure 6 — Bridge Daemon State Machine
+%% See src/bridge/bridge_daemon.py. Each tick (125 Hz) drives the transitions.
+
+stateDiagram-v2
+    [*] --> INIT
+    INIT: INIT\nload profiles\nload config
+    CONNECTING: CONNECTING\nRTDE handshake (port 30004)\nKlippy socket open
+    RUNNING: RUNNING\nread regs → plan → G-code\nwrite status\n(125 Hz loop)
+    FAULT: FAULT\ndisable stepper\nwrite fault=1\nraise error_code
+    RECONNECTING: RECONNECTING\nexponential backoff\n(2 s … 30 s)
+
+    INIT --> CONNECTING : deps ready
+    CONNECTING --> RUNNING : both links up
+    CONNECTING --> FAULT : auth / config error
+    RUNNING --> FAULT : e-stop bit set\nstall detected\nthermal warning
+    RUNNING --> RECONNECTING : watchdog 500 ms\nklippy disconnect
+    RECONNECTING --> CONNECTING : retry
+    FAULT --> RECONNECTING : operator clears\nfault bit
+    FAULT --> [*] : SIGTERM
+    RUNNING --> [*] : SIGTERM
