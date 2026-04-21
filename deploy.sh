@@ -133,6 +133,7 @@ sudo apt-get install -y \
     libboost-system-dev \
     libboost-thread-dev \
     libboost-filesystem-dev \
+    libboost-program-options-dev \
     python3-dev \
     python3-pip \
     git
