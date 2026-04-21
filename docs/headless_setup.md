@@ -249,8 +249,96 @@ ping -c 2 8.8.8.8
 ### 6.3 Notes
 
 - **Internet Sharing is a per-reboot setting** on macOS and Windows. If you reboot the laptop, re-enable sharing before you expect the Pi to reach the internet.
-- **Corporate/managed laptops** sometimes block Internet Sharing via MDM policy. If that's your situation, you'll need to bring in a cheap unmanaged switch — the rest of this guide assumes sharing works.
+- **Corporate/managed laptops** sometimes block Internet Sharing via MDM policy while still allowing outbound SSH. If Internet Sharing is blocked, see [§6.4 Corporate / enterprise network — SSH reverse proxy tunnel](#64-corporate--enterprise-network--ssh-reverse-proxy-tunnel) for a tunnel-based fallback that only needs an SSH path from the laptop to the Pi.
 - **VPNs on the laptop** can interact badly with ICS/Internet Sharing. If you have a VPN connected, the Pi may end up with no DNS or a blackholed default route. Disconnect the VPN for the Pi's install steps, then reconnect afterward.
+
+### 6.4 Corporate / enterprise network — SSH reverse proxy tunnel
+
+When the laptop is on a corporate/enterprise WiFi that blocks Internet Sharing (and you can't bring in your own switch and phone hotspot isn't an option), you can still give the Pi internet access as long as the laptop itself has internet **and** you can SSH from laptop to Pi. The idea: run an HTTP forward proxy on the laptop, tunnel it to the Pi via `ssh -R`, and point the Pi's `apt`/`pip`/`git` at the tunneled port.
+
+This only carries **build-time** traffic (package installs, source fetches). RTDE to the UR30, USB to the SKR Pico, and the Mainsail web UI are all local and don't need the tunnel.
+
+#### 6.4.1 One-time laptop setup
+
+```bash
+# macOS:
+brew install tinyproxy
+# The default config in /opt/homebrew/etc/tinyproxy/tinyproxy.conf listens on
+# 127.0.0.1:8888 and allows loopback clients. No edits needed.
+```
+
+#### 6.4.2 Pre-stage the proxy-enabled configs on the Pi
+
+While the Pi still has internet via normal means, pre-write disabled templates. Renaming them tomorrow is a one-line activation — no typing under pressure.
+
+```bash
+# On the Pi:
+sudo tee /etc/apt/apt.conf.d/99proxy.disabled <<'EOF'
+Acquire::http::Proxy "http://127.0.0.1:8888";
+Acquire::https::Proxy "http://127.0.0.1:8888";
+EOF
+
+mkdir -p ~/.config/pip
+tee ~/.config/pip/pip.conf.disabled <<'EOF'
+[global]
+proxy = http://127.0.0.1:8888
+EOF
+```
+
+#### 6.4.3 Bring the tunnel up
+
+From the laptop (in two terminals, or with `tmux`):
+
+```bash
+# Terminal 1 — start tinyproxy:
+/opt/homebrew/opt/tinyproxy/bin/tinyproxy -d -c /opt/homebrew/etc/tinyproxy/tinyproxy.conf
+
+# Terminal 2 — SSH with reverse forward. Keep this session open:
+ssh -o ExitOnForwardFailure=yes -R 8888:127.0.0.1:8888 w26-pi
+```
+
+Inside the SSH session, activate the proxy (system-wide, apt + pip + git):
+
+```bash
+sudo mv /etc/apt/apt.conf.d/99proxy.disabled /etc/apt/apt.conf.d/99proxy
+mv ~/.config/pip/pip.conf.disabled ~/.config/pip/pip.conf
+git config --global http.proxy http://127.0.0.1:8888
+git config --global https.proxy http://127.0.0.1:8888
+```
+
+Now `sudo apt-get update`, `pip install ...`, and `git pull` on the Pi egress via the laptop's internet. Prove it with:
+
+```bash
+curl -x http://127.0.0.1:8888 -sI https://pypi.org/simple/ | head -1
+# Expect: HTTP/2 200
+
+sudo apt-get update
+# Expect: Hit:1 deb.debian.org ... Hit:2 ...
+```
+
+The tinyproxy log on the laptop shows each `CONNECT deb.debian.org:80` as proof of traffic flow.
+
+#### 6.4.4 Deactivate when done
+
+Forgetting to disable leaves the Pi trying to reach `127.0.0.1:8888` after the tunnel closes — `apt` will hang for minutes. Always revert when you're done:
+
+```bash
+sudo mv /etc/apt/apt.conf.d/99proxy /etc/apt/apt.conf.d/99proxy.disabled
+mv ~/.config/pip/pip.conf ~/.config/pip/pip.conf.disabled
+git config --global --unset http.proxy
+git config --global --unset https.proxy
+```
+
+#### 6.4.5 What the tunnel does not carry
+
+The SSH reverse proxy only relays HTTP/HTTPS from the Pi to the internet. Runtime traffic is local to the lab subnet and never touches the tunnel:
+
+| Traffic | Route | Needs tunnel? |
+|---------|-------|---------------|
+| RTDE to UR30 (port 30004) | Pi ↔ UR30 on lab L2 | No |
+| USB serial to SKR Pico | Pi local USB | No |
+| Moonraker / Mainsail (:80, :7125) | Browser ↔ Pi on lab LAN | No |
+| `apt-get`, `pip`, `git` on the Pi | Out via the tunnel | **Yes** |
 
 ---
 
