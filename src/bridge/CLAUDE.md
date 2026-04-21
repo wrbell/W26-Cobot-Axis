@@ -10,7 +10,7 @@ Python daemon that translates UR30 RTDE register writes into Klipper G-code. Run
 | `__main__.py` | `python -m bridge` entry point |
 | `config.py` | Register mappings (`Out`/`In` classes), connection defaults, constants |
 | `rtde_client.py` | Thin wrapper over `ur_rtde` (with stub fallback when lib is missing) |
-| `klipper_client.py` | Unix socket client for `/tmp/klippy_uds` (JSON-RPC) |
+| `klipper_client.py` | Unix socket client for `~/printer_data/comms/klippy.sock` (JSON-RPC; MainsailOS default) |
 | `watchdog.py` | Stops stepper if no RTDE data for 500 ms |
 | `extrusion_profile.py` | Linear / polynomial / lookup-table rate shaping; profiles in `profiles.json` |
 | `klipper_status.py` | Polls `tmc2209 manual_stepper pump` status (4 Hz) |

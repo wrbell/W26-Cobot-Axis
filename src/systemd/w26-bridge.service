@@ -16,7 +16,7 @@ Description=W26 RTDE-to-Klipper Bridge Daemon
 Documentation=https://github.com/<org>/W26-Cobot-Axis
 After=klipper.service network-online.target
 Wants=network-online.target
-# The bridge needs the klippy UDS to exist. klipper.service
+# The bridge needs the klippy socket to exist. klipper.service
 # creates it a few seconds after starting. The bridge daemon
 # has its own retry loop in _connect_all() that will wait
 # for the socket, so a hard Requires= is not needed.
@@ -27,7 +27,7 @@ User=pi
 Group=pi
 # %h expands to home directory of User= (works for any username)
 WorkingDirectory=%h/W26-Cobot-Axis/src
-ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do [ -S /tmp/klippy_uds ] && exit 0; sleep 1; done; echo "Warning: klippy_uds not found after 30s, starting anyway (bridge will retry)" >&2'
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do [ -S %h/printer_data/comms/klippy.sock ] && exit 0; sleep 1; done; echo "Warning: klippy socket not found after 30s, starting anyway (bridge will retry)" >&2'
 ExecStart=%h/klippy-env/bin/python -m bridge
 Restart=on-failure
 RestartSec=5

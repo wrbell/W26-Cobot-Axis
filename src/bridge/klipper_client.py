@@ -1,7 +1,8 @@
 """
 W26 Cobot Axis — Klipper Unix Socket Client
 
-Communicates with klippy via /tmp/klippy_uds.
+Communicates with klippy over its Unix domain socket (MainsailOS default:
+~/printer_data/comms/klippy.sock; vanilla Klipper: /tmp/klippy_uds).
 Protocol: newline-delimited JSON terminated by \\x03 (ETX).
 
 Reference: docs/klipper_protocols.md, Sections 2 & 6.
@@ -11,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import socket
 import threading
 import time
@@ -19,11 +21,13 @@ log = logging.getLogger(__name__)
 
 ETX = b"\x03"
 
+_DEFAULT_SOCKET = os.path.expanduser("~/printer_data/comms/klippy.sock")
+
 
 class KlipperClient:
     """Persistent connection to the klippy Unix domain socket."""
 
-    def __init__(self, socket_path: str = "/tmp/klippy_uds"):
+    def __init__(self, socket_path: str = _DEFAULT_SOCKET):
         self.socket_path = socket_path
         self._sock: socket.socket | None = None
         self._id_counter = 0
