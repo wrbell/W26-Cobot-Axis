@@ -1,0 +1,30 @@
+%% Figure 3 — Lab Network Topology
+%% Unmanaged gigabit switch, static IPs only, no DHCP / no router.
+%% UR30 inbound-access whitelist forces Pi to 192.168.0.4.
+
+flowchart LR
+    UR30["<b>UR30 Controller</b><br/>192.168.0.3/24<br/>(factory default)<br/>Inbound whitelist: .4/32"]
+    Switch["Unmanaged<br/>Gigabit Switch<br/>(L2 hub only)"]
+    Pi["<b>Raspberry Pi</b><br/>192.168.0.4/24<br/>eth0 static<br/>(whitelisted)"]
+    Mac["Dev Laptop (optional)<br/>192.168.0.100/24<br/>en9 alias"]
+
+    UR30 <-->|"RJ45 1000-T"| Switch
+    Pi <-->|"RJ45 1000-T"| Switch
+    Mac <-.->|"USB-Eth (on demand)"| Switch
+
+    Ports["Ports used<br/>29999 Dashboard<br/>30001 Primary<br/>30002 Secondary (URScript)<br/>30003 Real-Time<br/>30004 RTDE"]
+    UR30 --- Ports
+
+    NoDHCP["No DHCP server<br/>No default gateway<br/>No DNS<br/>→ static IPs only"]
+    Switch --- NoDHCP
+
+    classDef ctrl fill:#dfe9f4,stroke:#2e4e6e,stroke-width:1.5px;
+    classDef pi fill:#e3f0df,stroke:#4a7a4a,stroke-width:1.5px;
+    classDef sw fill:#f4ecd8,stroke:#8a7a3a,stroke-width:1.5px;
+    classDef opt fill:#f5f5f5,stroke:#888,stroke-dasharray:4 3;
+    classDef note fill:#fff7d6,stroke:#a38a2e,stroke-width:1px;
+    class UR30 ctrl
+    class Pi pi
+    class Switch sw
+    class Mac opt
+    class Ports,NoDHCP note
