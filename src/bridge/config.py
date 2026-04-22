@@ -22,13 +22,19 @@ KLIPPY_SOCKET = os.path.expanduser("~/printer_data/comms/klippy.sock")
 # ---------------------------------------------------------------------------
 # RTDE Output Registers  (UR30 → Pi, written by URScript, read by bridge)
 # ---------------------------------------------------------------------------
+#
+# NOTE: ur-rtde enforces register-index ranges by type. `getOutputIntRegister()`
+# accepts only 12-19 (indices 0-11 are reserved for URCaps / Installation).
+# Same convention for output double registers. Bit registers (64-127) are
+# not range-restricted. All bridge registers moved into the [12, 23] range
+# 2026-04-22 after the library refused index 0 during first lab bringup.
 OUTPUT_REGISTERS = {
     "int": [
-        "output_int_register_0",      # extrusion mode: 0=off, 1=extrude, 2=retract
+        "output_int_register_12",     # extrusion mode: 0=off, 1=extrude, 2=retract
     ],
     "double": [
-        "output_double_register_0",   # commanded extrusion rate (mm/s)
-        "output_double_register_1",   # robot TCP speed magnitude (mm/s)
+        "output_double_register_12",  # commanded extrusion rate (mm/s)
+        "output_double_register_13",  # robot TCP speed magnitude (mm/s)
         "timestamp",                  # UR30 controller timestamp (seconds since boot)
     ],
     "bool": [
@@ -40,9 +46,9 @@ OUTPUT_REGISTERS = {
 
 # Friendly names for indexing into received data
 class Out:
-    MODE = "output_int_register_0"
-    EXTRUSION_RATE = "output_double_register_0"
-    TCP_SPEED = "output_double_register_1"
+    MODE = "output_int_register_12"
+    EXTRUSION_RATE = "output_double_register_12"
+    TCP_SPEED = "output_double_register_13"
     TIMESTAMP = "timestamp"
     ENABLE = "output_bit_register_64"
     ESTOP = "output_bit_register_65"
@@ -58,12 +64,12 @@ MODE_RETRACT = 2
 # ---------------------------------------------------------------------------
 INPUT_REGISTERS = {
     "int": [
-        "input_int_register_0",       # stepper status: 0=idle, 1=running, 2=error, 3=homing
-        "input_int_register_1",       # error code: 0=none, 1=comms_lost, 2=stall, 3=thermal
+        "input_int_register_18",      # stepper status: 0=idle, 1=running, 2=error, 3=homing
+        "input_int_register_19",      # error code: 0=none, 1=comms_lost, 2=stall, 3=thermal
     ],
     "double": [
-        "input_double_register_0",    # actual extrusion rate (mm/s)
-        "input_double_register_1",    # StallGuard load value (0-255, from core1 DIAG)
+        "input_double_register_18",   # actual extrusion rate (mm/s)
+        "input_double_register_19",   # StallGuard load value (0-255, from core1 DIAG)
     ],
     "bool": [
         "input_bit_register_64",      # stepper ready
@@ -72,10 +78,10 @@ INPUT_REGISTERS = {
 }
 
 class In:
-    STATUS = "input_int_register_0"
-    ERROR_CODE = "input_int_register_1"
-    ACTUAL_RATE = "input_double_register_0"
-    STALLGUARD_LOAD = "input_double_register_1"
+    STATUS = "input_int_register_18"
+    ERROR_CODE = "input_int_register_19"
+    ACTUAL_RATE = "input_double_register_18"
+    STALLGUARD_LOAD = "input_double_register_19"
     READY = "input_bit_register_64"
     FAULT = "input_bit_register_65"
 
@@ -140,7 +146,7 @@ LOG_DECIMATION = 1                   # log every Nth tick (1=all, 5=every 5th)
 # ---------------------------------------------------------------------------
 # Speed-proportional extrusion mode (Enhancement 4 — P4)
 # ---------------------------------------------------------------------------
-EXTRUSION_MODE_UR = 0               # UR30 computes rate, bridge uses output_double_register_0
+EXTRUSION_MODE_UR = 0               # UR30 computes rate, bridge uses output_double_register_12
 EXTRUSION_MODE_BRIDGE = 1           # Bridge computes rate from TCP speed * multiplier
 DEFAULT_EXTRUSION_COMP_MODE = EXTRUSION_MODE_UR
 

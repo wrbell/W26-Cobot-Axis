@@ -75,9 +75,9 @@ class KlipperStatusPoller:
     # ------------------------------------------------------------------
 
     def get_tmc_status(self) -> dict:
-        """Return the latest TMC2209 drv_status dict."""
+        """Return the latest TMC2209 drv_status dict (empty if not yet polled)."""
         with self._lock:
-            return dict(self._last_tmc_status)
+            return dict(self._last_tmc_status) if self._last_tmc_status else {}
 
     def is_stepper_enabled(self, name: str = config.STEPPER_NAME) -> bool:
         """True if the named stepper is reported as enabled by Klipper."""
@@ -95,7 +95,7 @@ class KlipperStatusPoller:
         with self._lock:
             if not self._tmc_available or not self._last_tmc_status:
                 return False
-            drv = self._last_tmc_status.get("drv_status", {})
+            drv = self._last_tmc_status.get("drv_status") or {}
             sg_result = drv.get("sg_result")
             if sg_result is None:
                 return False
@@ -106,7 +106,7 @@ class KlipperStatusPoller:
         with self._lock:
             if not self._tmc_available or not self._last_tmc_status:
                 return False
-            drv = self._last_tmc_status.get("drv_status", {})
+            drv = self._last_tmc_status.get("drv_status") or {}
             return bool(drv.get("stst", False))
 
     def is_hardware_stall(self) -> bool:
@@ -200,11 +200,16 @@ class KlipperStatusPoller:
                 if sg_data:
                     self._last_stallguard_status = sg_data
 
-        # Feed accumulator AFTER lock is released (avoids nested locking)
+        # Feed accumulator AFTER lock is released (avoids nested locking).
+        # _last_tmc_status / _last_stallguard_status can be None when the
+        # respective status poll hasn't landed yet (first tick) or when the
+        # firmware doesn't expose those fields (baseline Klipper without the
+        # StallGuard overlay). Both paths must no-op safely.
         if self._sg_accumulator is not None:
-            drv = self._last_tmc_status.get("drv_status", {})
+            tmc = self._last_tmc_status or {}
+            drv = tmc.get("drv_status") or {}
             sg = drv.get("sg_result", -1)
-            sd = self._last_stallguard_status
+            sd = self._last_stallguard_status or {}
             self._sg_accumulator.record(
                 sg_result=sg if sg is not None else -1,
                 stall_active=bool(sd.get("stall_active", False)),
