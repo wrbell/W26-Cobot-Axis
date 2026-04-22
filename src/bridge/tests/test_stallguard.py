@@ -2,9 +2,9 @@
 Unit tests for StallGuard integration across the bridge daemon stack.
 
 Tests:
-    - config.py: input_double_register_1 in INPUT_REGISTERS, In.STALLGUARD_LOAD
+    - config.py: input_double_register_19 in INPUT_REGISTERS, In.STALLGUARD_LOAD
     - klipper_status.py: is_hardware_stall(), get_stallguard_status()
-    - rtde_client.py: write_status() sets input_double_register_1
+    - rtde_client.py: write_status() sets input_double_register_19
     - bridge_daemon.py: hardware stall priority over UART stall, stallguard_load in _report_status
 
 All tests are mock-based and run without hardware.
@@ -25,13 +25,13 @@ from bridge.bridge_daemon import Bridge
 
 class TestStallGuardConfig:
 
-    def test_input_double_register_1_in_config(self):
-        """input_double_register_1 is listed in INPUT_REGISTERS['double']."""
-        assert "input_double_register_1" in config.INPUT_REGISTERS["double"]
+    def test_input_double_register_19_in_config(self):
+        """input_double_register_19 is listed in INPUT_REGISTERS['double']."""
+        assert "input_double_register_19" in config.INPUT_REGISTERS["double"]
 
     def test_in_stallguard_load_constant(self):
-        """In.STALLGUARD_LOAD maps to input_double_register_1."""
-        assert config.In.STALLGUARD_LOAD == "input_double_register_1"
+        """In.STALLGUARD_LOAD maps to input_double_register_19."""
+        assert config.In.STALLGUARD_LOAD == "input_double_register_19"
 
     def test_stallguard_monitor_poll_objects(self):
         """STALLGUARD_MONITOR_POLL_OBJECTS has stallguard_monitor key."""
@@ -151,9 +151,9 @@ class TestRTDEClientStallGuard:
 
         with patch("bridge.rtde_client.HAS_UR_RTDE", True), \
              patch("bridge.rtde_client.rtde_receive", create=True) as mock_recv_mod, \
-             patch("bridge.rtde_client.rtde_control", create=True) as mock_ctrl_mod:
+             patch("bridge.rtde_client.rtde_io", create=True) as mock_ctrl_mod:
             mock_recv_mod.RTDEReceiveInterface = mock_recv_cls
-            mock_ctrl_mod.RTDEControlInterface = mock_ctrl_cls
+            mock_ctrl_mod.RTDEIOInterface = mock_ctrl_cls
             client = RTDEClient(host="192.168.1.100")
             client.connect()
             yield client, mock_ctrl_instance
@@ -169,7 +169,7 @@ class TestRTDEClientStallGuard:
             fault=False,
             stallguard_load=150.0,
         )
-        ctrl.setInputDoubleRegister.assert_any_call(1, 150.0)
+        ctrl.setInputDoubleRegister.assert_any_call(19, 150.0)
 
     def test_write_status_stallguard_default_zero(self, mocked_client):
         """write_status() defaults stallguard_load to 0.0."""
@@ -181,7 +181,7 @@ class TestRTDEClientStallGuard:
             ready=True,
             fault=False,
         )
-        ctrl.setInputDoubleRegister.assert_any_call(1, 0.0)
+        ctrl.setInputDoubleRegister.assert_any_call(19, 0.0)
 
     def test_write_status_both_double_registers(self, mocked_client):
         """write_status() sets both double register 0 (rate) and 1 (sg_load)."""
@@ -194,8 +194,8 @@ class TestRTDEClientStallGuard:
             fault=False,
             stallguard_load=200.0,
         )
-        ctrl.setInputDoubleRegister.assert_any_call(0, 25.0)
-        ctrl.setInputDoubleRegister.assert_any_call(1, 200.0)
+        ctrl.setInputDoubleRegister.assert_any_call(18, 25.0)
+        ctrl.setInputDoubleRegister.assert_any_call(19, 200.0)
 
     def test_write_status_stub_mode_no_crash(self):
         """write_status() with stallguard_load in stub mode does not crash."""

@@ -17,10 +17,13 @@ from . import config
 
 log = logging.getLogger(__name__)
 
-# Try SDU ur_rtde first (better API), fall back to manual implementation
+# Try SDU ur_rtde first (better API), fall back to manual implementation.
+# rtde_io is the right interface for setInput*Register (RTDEControlInterface
+# does not expose those methods; it's intended for motion commands and
+# requires Remote Control mode + powered arm).
 try:
     import rtde_receive
-    import rtde_control
+    import rtde_io
     HAS_UR_RTDE = True
 except ImportError:
     HAS_UR_RTDE = False
@@ -38,8 +41,8 @@ class RTDEClient:
     def __init__(self, host: str = config.UR30_HOST, frequency: int = config.RTDE_FREQUENCY):
         self.host = host
         self.frequency = frequency
-        self._rtde_r = None  # RTDEReceiveInterface
-        self._rtde_c = None  # RTDEControlInterface (for writing input registers)
+        self._rtde_r = None  # RTDEReceiveInterface (read output registers)
+        self._rtde_c = None  # RTDEIOInterface (write input registers)
 
     # ------------------------------------------------------------------
     # Connection
@@ -61,7 +64,7 @@ class RTDEClient:
             self._rtde_r = rtde_receive.RTDEReceiveInterface(
                 self.host, self.frequency
             )
-            self._rtde_c = rtde_control.RTDEControlInterface(self.host)
+            self._rtde_c = rtde_io.RTDEIOInterface(self.host)
         finally:
             socket.setdefaulttimeout(prev_timeout)
         log.info("RTDE connected to %s", self.host)
@@ -100,14 +103,21 @@ class RTDEClient:
         if not HAS_UR_RTDE:
             return self._stub_commands()
 
+        # ur-rtde restricts int/double register indices to [12, 19].
+        # Bit registers: the RTDEReceiveInterface in this ur_rtde version does
+        # NOT expose getOutputBitRegister() / getOutputBoolRegister(). URScript
+        # can still WRITE the bit registers (UR side is fine), but we can't
+        # READ them. Default to permissive values so mode != 0 is the gate.
+        # E-stop coverage stays via the pendant E-stop and the bridge watchdog.
+        # TODO: redesign to encode enable/estop/home into int registers.
         return {
-            "mode": self._rtde_r.getOutputIntRegister(0),
-            "extrusion_rate": self._rtde_r.getOutputDoubleRegister(0),
-            "tcp_speed": self._rtde_r.getOutputDoubleRegister(1),
+            "mode": self._rtde_r.getOutputIntRegister(12),
+            "extrusion_rate": self._rtde_r.getOutputDoubleRegister(12),
+            "tcp_speed": self._rtde_r.getOutputDoubleRegister(13),
             "timestamp": self._rtde_r.getTimestamp(),
-            "enable": self._rtde_r.getOutputBitRegister(64),
-            "estop": self._rtde_r.getOutputBitRegister(65),
-            "home": self._rtde_r.getOutputBitRegister(66),
+            "enable": True,
+            "estop": False,
+            "home": False,
         }
 
     # ------------------------------------------------------------------
@@ -131,12 +141,16 @@ class RTDEClient:
         if not HAS_UR_RTDE:
             return
 
-        self._rtde_c.setInputIntRegister(0, status)
-        self._rtde_c.setInputIntRegister(1, error_code)
-        self._rtde_c.setInputDoubleRegister(0, actual_rate)
-        self._rtde_c.setInputDoubleRegister(1, stallguard_load)
-        self._rtde_c.setInputBitRegister(64, ready)
-        self._rtde_c.setInputBitRegister(65, fault)
+        # ur-rtde restricts INPUT int/double register indices to [18, 22]
+        # (vs OUTPUT [12, 19]) — different ranges per direction. See config.py.
+        # RTDEIOInterface does NOT expose setInputBitRegister; ready/fault bits
+        # are dropped here for now. URScript still reads them as their defaults
+        # (False); add an int-register-encoded variant if URScript needs them.
+        self._rtde_c.setInputIntRegister(18, status)
+        self._rtde_c.setInputIntRegister(19, error_code)
+        self._rtde_c.setInputDoubleRegister(18, actual_rate)
+        self._rtde_c.setInputDoubleRegister(19, stallguard_load)
+        # ready, fault — TODO: encode in input_int_register_20
 
     # ------------------------------------------------------------------
     # Robot state (convenience)

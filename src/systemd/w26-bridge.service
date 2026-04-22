@@ -25,10 +25,12 @@ Wants=network-online.target
 Type=simple
 User=pi
 Group=pi
-# %h expands to home directory of User= (works for any username)
-WorkingDirectory=%h/W26-Cobot-Axis/src
-ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do [ -S %h/printer_data/comms/klippy.sock ] && exit 0; sleep 1; done; echo "Warning: klippy socket not found after 30s, starting anyway (bridge will retry)" >&2'
-ExecStart=%h/klippy-env/bin/python -m bridge
+# Paths are hardcoded to /home/pi because systemd %h resolves to /root
+# for system-manager services (it's the service manager's home, not
+# User='s). Hardcoded path matches deploy.sh which assumes the pi user.
+WorkingDirectory=/home/pi/W26-Cobot-Axis/src
+ExecStartPre=/bin/bash -c 'for i in $(seq 1 30); do [ -S /home/pi/printer_data/comms/klippy.sock ] && exit 0; sleep 1; done; echo "Warning: klippy socket not found after 30s, starting anyway (bridge will retry)" >&2'
+ExecStart=/home/pi/klippy-env/bin/python -m bridge
 Restart=on-failure
 RestartSec=5
 StartLimitBurst=5
@@ -43,9 +45,13 @@ SyslogIdentifier=w26-bridge
 Environment=PYTHONUNBUFFERED=1
 
 # Security hardening
+# NOTE: ProtectHome=read-only bind-mounts /home in a namespace that blocks
+# CHDIR into WorkingDirectory under /home/<user>/... (systemd exits 200/CHDIR
+# "Permission denied" even when the user owns the path). Disabled so the
+# bridge can chdir into the checked-out repo under the pi user's home.
 NoNewPrivileges=true
 ProtectSystem=strict
-ProtectHome=read-only
+ProtectHome=no
 ReadWritePaths=/tmp
 
 [Install]

@@ -90,9 +90,9 @@ def mock_rtde_interfaces():
 
     with patch("bridge.rtde_client.HAS_UR_RTDE", True), \
          patch("bridge.rtde_client.rtde_receive", create=True) as mock_recv_mod, \
-         patch("bridge.rtde_client.rtde_control", create=True) as mock_ctrl_mod:
+         patch("bridge.rtde_client.rtde_io", create=True) as mock_ctrl_mod:
         mock_recv_mod.RTDEReceiveInterface = mock_recv_cls
-        mock_ctrl_mod.RTDEControlInterface = mock_ctrl_cls
+        mock_ctrl_mod.RTDEIOInterface = mock_ctrl_cls
         yield {
             "recv_cls": mock_recv_cls,
             "ctrl_cls": mock_ctrl_cls,
@@ -208,13 +208,13 @@ class TestRegisterRead:
 
         cmd = client.read_commands()
         assert cmd["mode"] == 1
-        mocks["recv"].getOutputIntRegister.assert_called_with(0)
+        mocks["recv"].getOutputIntRegister.assert_called_with(12)
 
     def test_read_commands_extrusion_rate(self, mocked_client):
         """read_commands() reads extrusion_rate from double register 0."""
         client, mocks = mocked_client
         mocks["recv"].getOutputIntRegister.return_value = 0
-        mocks["recv"].getOutputDoubleRegister.side_effect = lambda reg: {0: 25.5, 1: 0.0}[reg]
+        mocks["recv"].getOutputDoubleRegister.side_effect = lambda reg: {12: 25.5, 13: 0.0}[reg]
         mocks["recv"].getOutputBitRegister.return_value = False
 
         cmd = client.read_commands()
@@ -224,53 +224,52 @@ class TestRegisterRead:
         """read_commands() reads tcp_speed from double register 1."""
         client, mocks = mocked_client
         mocks["recv"].getOutputIntRegister.return_value = 0
-        mocks["recv"].getOutputDoubleRegister.side_effect = lambda reg: {0: 0.0, 1: 100.0}[reg]
+        mocks["recv"].getOutputDoubleRegister.side_effect = lambda reg: {12: 0.0, 13: 100.0}[reg]
         mocks["recv"].getOutputBitRegister.return_value = False
 
         cmd = client.read_commands()
         assert cmd["tcp_speed"] == 100.0
 
-    def test_read_commands_bool_registers(self, mocked_client):
-        """read_commands() reads boolean registers correctly."""
+    def test_read_commands_bool_register_defaults(self, mocked_client):
+        """read_commands() returns hardcoded defaults for enable/estop/home.
+
+        ur_rtde's RTDEReceiveInterface does not expose getOutputBitRegister,
+        so we can't read the bit registers — the bridge defaults to permissive
+        values (enable=True, estop=False, home=False) and relies on
+        mode != 0 + the watchdog + pendant E-stop for safety.
+        """
         client, mocks = mocked_client
         mocks["recv"].getOutputIntRegister.return_value = 0
         mocks["recv"].getOutputDoubleRegister.return_value = 0.0
-        mocks["recv"].getOutputBitRegister.side_effect = lambda reg: {
-            64: True, 65: False, 66: True
-        }[reg]
 
         cmd = client.read_commands()
         assert cmd["enable"] is True
         assert cmd["estop"] is False
-        assert cmd["home"] is True
+        assert cmd["home"] is False
 
-    @pytest.mark.parametrize("mode,rate,speed,enable,estop,home", [
-        (0, 0.0, 0.0, False, False, False),     # all zeros
-        (1, 25.0, 100.0, True, False, False),    # typical extrude
-        (2, 15.0, 50.0, True, False, False),     # typical retract
-        (1, 50.0, 200.0, True, True, False),     # estop active
-        (0, 0.0, 0.0, False, False, True),       # homing
+    @pytest.mark.parametrize("mode,rate,speed", [
+        (0, 0.0, 0.0),       # all zeros
+        (1, 25.0, 100.0),    # typical extrude
+        (2, 15.0, 50.0),     # typical retract
+        (1, 50.0, 200.0),    # higher rate
     ])
-    def test_read_commands_parametrized(self, mock_rtde_interfaces, mode, rate,
-                                        speed, enable, estop, home):
-        """read_commands() correctly maps various register value combinations."""
+    def test_read_commands_parametrized(self, mock_rtde_interfaces, mode, rate, speed):
+        """read_commands() correctly maps mode/rate/speed combinations."""
         client = RTDEClient()
         client.connect()
         mocks = mock_rtde_interfaces
 
         mocks["recv"].getOutputIntRegister.return_value = mode
-        mocks["recv"].getOutputDoubleRegister.side_effect = lambda reg: {0: rate, 1: speed}[reg]
-        mocks["recv"].getOutputBitRegister.side_effect = lambda reg: {
-            64: enable, 65: estop, 66: home
-        }[reg]
+        mocks["recv"].getOutputDoubleRegister.side_effect = lambda reg: {12: rate, 13: speed}[reg]
 
         cmd = client.read_commands()
         assert cmd["mode"] == mode
         assert cmd["extrusion_rate"] == rate
         assert cmd["tcp_speed"] == speed
-        assert cmd["enable"] == enable
-        assert cmd["estop"] == estop
-        assert cmd["home"] == home
+        # bit-register-derived fields are constants now
+        assert cmd["enable"] is True
+        assert cmd["estop"] is False
+        assert cmd["home"] is False
 
 
 # ===================================================================
@@ -280,7 +279,13 @@ class TestRegisterRead:
 class TestRegisterWrite:
 
     def test_write_status_sets_all_registers(self, mocked_client):
-        """write_status() calls all six setInput*Register methods."""
+        """write_status() calls the four setInput[Int|Double]Register methods.
+
+        Note: ready/fault bit-register writes were dropped when we moved from
+        RTDEControlInterface to RTDEIOInterface (the latter does not expose
+        setInputBitRegister). URScript reads them as default-False until we
+        encode them into an int register.
+        """
         client, mocks = mocked_client
         client.write_status(
             status=config.STATUS_RUNNING,
@@ -290,12 +295,10 @@ class TestRegisterWrite:
             fault=False,
         )
         ctrl = mocks["ctrl"]
-        ctrl.setInputIntRegister.assert_any_call(0, config.STATUS_RUNNING)
-        ctrl.setInputIntRegister.assert_any_call(1, config.ERR_NONE)
-        ctrl.setInputDoubleRegister.assert_any_call(0, 10.0)
-        ctrl.setInputDoubleRegister.assert_any_call(1, 0.0)
-        ctrl.setInputBitRegister.assert_any_call(64, True)
-        ctrl.setInputBitRegister.assert_any_call(65, False)
+        ctrl.setInputIntRegister.assert_any_call(18, config.STATUS_RUNNING)
+        ctrl.setInputIntRegister.assert_any_call(19, config.ERR_NONE)
+        ctrl.setInputDoubleRegister.assert_any_call(18, 10.0)
+        ctrl.setInputDoubleRegister.assert_any_call(19, 0.0)
 
     def test_write_status_int_registers(self, mocked_client):
         """write_status() sets int registers with (index, value)."""
@@ -308,8 +311,8 @@ class TestRegisterWrite:
             fault=True,
         )
         ctrl = mocks["ctrl"]
-        ctrl.setInputIntRegister.assert_any_call(0, config.STATUS_ERROR)
-        ctrl.setInputIntRegister.assert_any_call(1, config.ERR_COMMS_LOST)
+        ctrl.setInputIntRegister.assert_any_call(18, config.STATUS_ERROR)
+        ctrl.setInputIntRegister.assert_any_call(19, config.ERR_COMMS_LOST)
 
     def test_write_status_double_register(self, mocked_client):
         """write_status() sets double register 0 with actual_rate."""
@@ -321,10 +324,15 @@ class TestRegisterWrite:
             ready=True,
             fault=False,
         )
-        mocks["ctrl"].setInputDoubleRegister.assert_any_call(0, 42.5)
+        mocks["ctrl"].setInputDoubleRegister.assert_any_call(18, 42.5)
 
-    def test_write_status_bool_registers(self, mocked_client):
-        """write_status() sets bit registers 64 and 65."""
+    def test_write_status_no_bit_register_writes(self, mocked_client):
+        """write_status() does NOT call setInputBitRegister.
+
+        RTDEIOInterface (used since the ur_rtde Python binding doesn't expose
+        bit registers on either receive or control interfaces) doesn't have
+        this method. Verifying it's never called catches accidental regressions.
+        """
         client, mocks = mocked_client
         client.write_status(
             status=config.STATUS_IDLE,
@@ -334,8 +342,7 @@ class TestRegisterWrite:
             fault=True,
         )
         ctrl = mocks["ctrl"]
-        ctrl.setInputBitRegister.assert_any_call(64, True)
-        ctrl.setInputBitRegister.assert_any_call(65, True)
+        ctrl.setInputBitRegister.assert_not_called()
 
     @pytest.mark.parametrize("status,error_code,rate,ready,fault", [
         (config.STATUS_IDLE, config.ERR_NONE, 0.0, True, False),
@@ -354,11 +361,11 @@ class TestRegisterWrite:
 
         client.write_status(status, error_code, rate, ready, fault)
 
-        ctrl.setInputIntRegister.assert_any_call(0, status)
-        ctrl.setInputIntRegister.assert_any_call(1, error_code)
-        ctrl.setInputDoubleRegister.assert_any_call(0, rate)
-        ctrl.setInputBitRegister.assert_any_call(64, ready)
-        ctrl.setInputBitRegister.assert_any_call(65, fault)
+        ctrl.setInputIntRegister.assert_any_call(18, status)
+        ctrl.setInputIntRegister.assert_any_call(19, error_code)
+        ctrl.setInputDoubleRegister.assert_any_call(18, rate)
+        # ready/fault bit-register writes are intentionally dropped
+        # (RTDEIOInterface lacks setInputBitRegister) — see TODO in rtde_client.
 
 
 # ===================================================================

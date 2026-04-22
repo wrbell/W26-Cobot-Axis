@@ -386,7 +386,7 @@ class Bridge:
                 tmc_status = {}
                 if self.status_poller:
                     tmc_status = self.status_poller.get_tmc_status()
-                drv = tmc_status.get("drv_status", {})
+                drv = tmc_status.get("drv_status") or {}
                 self.data_logger.log_tick({
                     "timestamp": time.monotonic(),
                     "wall_clock": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -669,7 +669,7 @@ class Bridge:
         stallguard_load = 0.0
         if self.status_poller:
             tmc_status = self.status_poller.get_tmc_status()
-            drv = tmc_status.get("drv_status", {})
+            drv = tmc_status.get("drv_status") or {}
             sg_result = drv.get("sg_result")
             if sg_result is not None:
                 stallguard_load = float(sg_result)
