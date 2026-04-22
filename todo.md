@@ -512,6 +512,16 @@ Full guide: `docs/config_guide.md` — covers motor current, rotation distance, 
 
 Full test procedures with pass/fail criteria and data sheets: `docs/design/test_procedures.md`
 
+### Phase 4 status (updated 2026-04-22 post-bringup)
+
+- [x] **End-to-end chain proven** — URScript → RTDE → bridge → Klipper → TMC2209 → motor spin validated on real hardware 2026-04-22. See `CHANGELOG.md [2026-04-22b]`.
+- [x] **Bridge stable under live RTDE** — `w26-bridge.service` runs 125 Hz without restarts; see `CHANGELOG.md [2026-04-22]` for the three start-up bugs fixed that day.
+- [x] **Klipper + SKR Pico + TMC2209 stable** — motor spins via MANUAL_STEPPER, TMC UART reads clean, StallGuard monitor armed (overlay not loaded on current firmware).
+- [x] **Network topology proven** — static IPs on lab switch; UR30 inbound whitelist forces Pi to `192.168.0.4`.
+- [ ] **CSV capture run** — next lab visit: start bridge with `--log` so `scripts/report_figures.py` can populate Figures 8 / 10 and Table 5 quantitative rows. Blocked on lab access.
+- [ ] **Fix remaining URScript files** — `test_basic.script`, `test_calibration.script`, `slicer_mblack06mm.script` still reference the old 0/1 register indices; follow-up PR after the primary `extrusion_control.script` fix lands.
+- [ ] **`.urp` wrapper for test_motor_only.script** — nice to have for the oral-defense demo so we don't depend on Secondary Interface push.
+
 ### TP-01: End-to-End Functional Test (45 min, Week 12)
 
 Verifies the full communication chain responds to all commands.

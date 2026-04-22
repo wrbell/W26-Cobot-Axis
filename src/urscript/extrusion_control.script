@@ -3,106 +3,118 @@
 # Purpose: Writes extrusion commands to RTDE output registers,
 #          reads stepper status from RTDE input registers.
 #
-# Register mapping (from docs/register_allocation.md):
+# Register mapping (from docs/register_allocation.md, post-PR #29):
 #
 # OUTPUT (UR30 → Pi, written here):
-#   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)
-#   output_double_register_0 = commanded extrusion rate (mm/s)
-#   output_double_register_1 = TCP speed magnitude (mm/s)
-#   output_bit_register_64   = extrusion enable
-#   output_bit_register_65   = emergency stop
-#   output_bit_register_66   = home stepper
+#   output_int_register_12    = extrusion mode (0=off, 1=extrude, 2=retract)
+#   output_double_register_12 = commanded extrusion rate (mm/s)
+#   output_double_register_13 = TCP speed magnitude (mm/s)
 #
 # INPUT (Pi → UR30, read here):
-#   input_int_register_0     = stepper status (0=idle, 1=running, 2=error, 3=homing)
-#   input_int_register_1     = error code (0=none, 1=comms_lost, 2=stall, 3=thermal)
-#   input_double_register_0  = actual extrusion rate (mm/s)
-#   input_bit_register_64    = stepper ready
-#   input_bit_register_65    = stepper fault
+#   input_int_register_18     = stepper status (0=idle, 1=running, 2=error, 3=homing)
+#   input_int_register_19     = error code (0=none, 1=comms_lost, 2=stall, 3=thermal)
+#   input_double_register_18  = actual extrusion rate (mm/s)
+#   input_double_register_19  = StallGuard load value (0-255, lower = higher load)
+#
+# ur-rtde Python binding restricts int/double register indices to
+# [12, 19] for outputs and [18, 22] for inputs; bit registers are not
+# exposed on either side. This script therefore uses int / double
+# registers only. The bridge ignores bit-register writes, so they have
+# been dropped entirely; motion is gated on `mode != 0` plus the bridge
+# watchdog and pendant E-stop. Faults surface via input_int_register_18
+# (status == 2 means ERROR) and input_int_register_19 (error code).
+#
+# IMPORTANT — Secondary Interface push:
+#   When pushing this file via port 30002 (Secondary Interface), the
+#   UR30 silently drops top-level variable assignments (e.g., a bare
+#   `X = 5`). Either load this as a .urp on the pendant, or call the
+#   desired top-level function from inside a `def ... end` wrapper.
 
 # ===================================================================
 # Configuration — adjust these for your application
 # ===================================================================
-MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit
+MAX_EXTRUSION_RATE = 50.0     # mm/s safety limit (clamp in URScript + config.py)
 
 # Speed-sync configuration (used by extrude_along_path only)
 EXTRUSION_MULTIPLIER = 1.0    # mm extruded per mm/s TCP speed
 ENABLE_SPEED_SYNC = True      # True = extrusion rate tracks TCP speed
 
+# Status / error constants (mirror src/bridge/config.py)
+STATUS_IDLE    = 0
+STATUS_RUNNING = 1
+STATUS_ERROR   = 2
+STATUS_HOMING  = 3
+
 # ===================================================================
-# Helper functions
+# Helper functions — output registers
 # ===================================================================
 
 def set_extrusion_mode(mode):
     # mode: 0=off, 1=extrude, 2=retract
-    write_output_integer_register(0, mode)
+    write_output_integer_register(12, mode)
 end
 
 def set_extrusion_rate(rate_mm_s):
-    # Clamp to safety limit
+    # Clamp to safety limit (bridge also clamps — belt-and-braces)
     local clamped = rate_mm_s
     if clamped > MAX_EXTRUSION_RATE:
         clamped = MAX_EXTRUSION_RATE
     end
-    write_output_float_register(0, clamped)
-end
-
-def set_extrusion_enable(enabled):
-    write_output_boolean_register(64, enabled)
-end
-
-def set_estop(active):
-    write_output_boolean_register(65, active)
-end
-
-def set_home_command(active):
-    write_output_boolean_register(66, active)
+    write_output_float_register(12, clamped)
 end
 
 def update_tcp_speed():
-    # Write current TCP speed to output register for bridge daemon
+    # Write current TCP speed to output register for the bridge daemon.
     local speed_vec = get_actual_tcp_speed()
     local speed_mag = norm(speed_vec)
     local speed_mm_s = speed_mag * 1000.0
-    write_output_float_register(1, speed_mm_s)
+    write_output_float_register(13, speed_mm_s)
     return speed_mm_s
 end
 
+# ===================================================================
+# Helper functions — input registers (status from Pi)
+# ===================================================================
+
 def get_stepper_status():
-    return read_input_integer_register(0)
+    # 0=idle, 1=running, 2=error, 3=homing
+    return read_input_integer_register(18)
 end
 
 def get_stepper_error():
-    return read_input_integer_register(1)
+    # 0=none, 1=comms_lost, 2=stall, 3=thermal
+    return read_input_integer_register(19)
 end
 
 def get_actual_extrusion_rate():
-    return read_input_float_register(0)
-end
-
-def is_stepper_ready():
-    return read_input_boolean_register(64)
-end
-
-def is_stepper_fault():
-    return read_input_boolean_register(65)
+    return read_input_float_register(18)
 end
 
 def get_stallguard_load():
-    # Read StallGuard load value from bridge daemon (0-255)
-    # Lower values = higher motor load, 0 = stall
-    return read_input_float_register(1)
+    # StallGuard load value (0-255). Lower = higher motor load. 0 = stall.
+    return read_input_float_register(19)
+end
+
+def is_stepper_ready():
+    # "Ready" = not in error/homing. Idle or running is fine.
+    local s = get_stepper_status()
+    return s == STATUS_IDLE or s == STATUS_RUNNING
+end
+
+def is_stepper_fault():
+    # Bridge sets status to ERROR whenever it asserts a fault condition.
+    return get_stepper_status() == STATUS_ERROR
 end
 
 def check_stallguard():
-    # Check StallGuard status: -1 = stall, 0 = warning, 1 = ok
+    # Returns: -1 = stall, 0 = warning, 1 = ok
     local sg = get_stallguard_load()
     if sg < 10:
-        return -1   # stall detected
+        return -1
     elif sg < 30:
-        return 0    # warning: high load
+        return 0
     else:
-        return 1    # ok
+        return 1
     end
 end
 
@@ -120,16 +132,13 @@ def wait_for_stepper_ready(timeout_s):
 end
 
 # ===================================================================
-# Initialize — clear all registers
+# Initialize — clear command registers to a safe baseline
 # ===================================================================
 
 def init_registers():
     set_extrusion_mode(0)
     set_extrusion_rate(0.0)
-    set_extrusion_enable(False)
-    set_estop(False)
-    set_home_command(False)
-    write_output_float_register(1, 0.0)
+    write_output_float_register(13, 0.0)    # TCP speed = 0 (arm idle)
 end
 
 # ===================================================================
@@ -152,13 +161,11 @@ end
 def pump_on(rate_mm_s):
     # Start constant-rate extrusion. Call once before a sequence of
     # robot moves. Blocks until the stepper is ready (5s timeout).
-    set_extrusion_enable(True)
-    set_extrusion_mode(1)   # extrude
+    set_extrusion_mode(1)      # extrude — bridge gates on mode != 0
     set_extrusion_rate(rate_mm_s)
 
     if wait_for_stepper_ready(5.0) == False:
         set_extrusion_mode(0)
-        set_extrusion_enable(False)
         popup("pump_on: stepper not ready", error=True)
     end
 end
@@ -168,13 +175,11 @@ def pump_off():
     # Does NOT retract — call retract() separately if needed.
     set_extrusion_mode(0)
     set_extrusion_rate(0.0)
-    set_extrusion_enable(False)
 end
 
 def retract(distance_mm, speed_mm_s):
     # Brief retraction to relieve pressure (anti-ooze)
-    set_extrusion_enable(True)
-    set_extrusion_mode(2)   # retract
+    set_extrusion_mode(2)      # retract
     set_extrusion_rate(speed_mm_s)
 
     # Wait for the retraction to complete (approximate timing)
@@ -182,7 +187,7 @@ def retract(distance_mm, speed_mm_s):
     sleep(retract_time)
 
     set_extrusion_mode(0)
-    set_extrusion_enable(False)
+    set_extrusion_rate(0.0)
 end
 
 # ===================================================================
@@ -194,13 +199,11 @@ end
 # pump_on/pump_off above.
 
 def extrude_along_path(target_pose, speed, accel):
-    # Enable extrusion system
-    set_extrusion_enable(True)
-    set_extrusion_mode(1)   # extrude
+    set_extrusion_mode(1)      # extrude
 
     # Wait for stepper to be ready (5 second timeout)
     if wait_for_stepper_ready(5.0) == False:
-        set_extrusion_enable(False)
+        set_extrusion_mode(0)
         return
     end
 
@@ -216,7 +219,7 @@ def extrude_along_path(target_pose, speed, accel):
             set_extrusion_rate(rate)
         end
 
-        # Check for stepper faults (including StallGuard)
+        # Check for stepper faults (including StallGuard-derived stalls)
         if is_stepper_fault():
             local err = get_stepper_error()
             local sg_status = check_stallguard()
@@ -225,7 +228,7 @@ def extrude_along_path(target_pose, speed, accel):
             else:
                 popup(str_cat("Stepper fault: error code ", err), error=True)
             end
-            stopl(2.0)   # decelerate robot to stop
+            stopl(2.0)         # decelerate robot to stop
             break
         end
 
@@ -234,11 +237,11 @@ def extrude_along_path(target_pose, speed, accel):
 
     # Stop extrusion
     set_extrusion_mode(0)
-    set_extrusion_enable(False)
+    set_extrusion_rate(0.0)
 end
 
 # ===================================================================
-# Example: Wrapping slicer output with pump control
+# Example: wrapping slicer output with pump control
 # ===================================================================
 # The slicer generates a sequence of mv() calls at constant velocity.
 # To add extrusion, wrap the slicer output with pump_on/pump_off:
@@ -248,12 +251,6 @@ end
 #   end
 #
 #   init_registers()
-#
-#   # Home the stepper
-#   set_home_command(True)
-#   sync()
-#   set_home_command(False)
-#   sleep(1.0)
 #
 #   # Move to first waypoint without extruding
 #   movej(start_joint_config, a=1.2, v=0.06)

@@ -73,7 +73,9 @@ All system power is drawn from the UR30 controller's internal 24 V power block (
 
 The stepper connects to the SKR Pico E-axis driver header: step on gpio14, direction on gpio13, enable on gpio15 (active low), TMC2209 UART address 3 on the shared bus (gpio9 RX, gpio8 TX). The Pi connects only via USB-C to the SKR Pico and Ethernet to a gigabit switch. Estimated total draw is 1.0 A typical / 1.4 A peak at 24 V, leaving 1 A of margin on the 2 A continuous budget.
 
-<!-- FIG 3: Power Distribution Schematic. FIG 4: SKR Pico Wiring Diagram. TBL 3: Bill of Materials (~$183, 28 items). -->
+The lab network uses an unmanaged gigabit switch with no DHCP or router — a layer-2-only topology (Fig 3). UR30 sits at `192.168.0.3` (factory default); the Pi holds a static `192.168.0.4/24` lease that matches the UR30 installation's inbound-access whitelist. A dev laptop joins at `192.168.0.100` on demand. This eliminates DNS/DHCP as failure modes and keeps round-trip ping under 1 ms.
+
+<!-- FIG 3: Lab Network Topology. FIG 4: SKR Pico Wiring Diagram. TBL 3: Bill of Materials (~$183, 28 items). -->
 
 ### F.2 Software Architecture
 
@@ -109,6 +111,8 @@ Testing uses four test procedures:
 - **Fault-injection test**: deliberate RTDE disconnect, Klipper shutdown, injected stall, and power interruption, each must produce safe-state within 500 ms.
 
 A hardware-in-the-loop stretch test (`docs/design/hitl_plan.md`, TP-06) validates the Core1 StallGuard overlay: the Core1 firmware monitors the TMC2209 DIAG pin and propagates stall events to a Klipper MCU command, through a klippy extras module, into an RTDE input register, and up to the URScript program. Measured results are in Table 5.
+
+First end-to-end motor rotation under UR30 command was achieved 2026-04-22: a URScript ramp-hold-ramp profile drove the pump shaft cleanly at 4 mm/s through the full chain (URScript → RTDE → bridge → Klipper → TMC2209 → pump). Measured latency and accuracy remain deferred to a follow-on capture run.
 
 <!-- TBL 5: Test Results Summary. FIG 8: Latency Model vs Measured. FIG 9: Test Setup Photo. FIG 10: Extrusion Accuracy Plot. -->
 
@@ -207,27 +211,26 @@ Full BOM with DigiKey/Newark part numbers in `docs/phase2/bom.md`.
 
 | Direction | Register | Type | Purpose |
 |-----------|----------|------|---------|
-| UR30 → Pi | output_int_register_0 | INT32 | Extrusion mode: 0=off, 1=extrude, 2=retract |
-| UR30 → Pi | output_double_register_0 | DOUBLE | Commanded extrusion rate (mm/s) |
-| UR30 → Pi | output_double_register_1 | DOUBLE | TCP speed magnitude (mm/s) |
-| UR30 → Pi | output_bit_register_64 | BOOL | Enable |
-| UR30 → Pi | output_bit_register_65 | BOOL | Emergency stop |
-| UR30 → Pi | output_bit_register_66 | BOOL | Home command |
-| Pi → UR30 | input_int_register_0 | INT32 | Status: 0=idle, 1=running, 2=error, 3=homing |
-| Pi → UR30 | input_int_register_1 | INT32 | Error code: 0=none, 1=comms_lost, 2=stall, 3=thermal |
-| Pi → UR30 | input_double_register_0 | DOUBLE | Actual extrusion rate (mm/s) |
-| Pi → UR30 | input_bit_register_64 | BOOL | Ready flag |
-| Pi → UR30 | input_bit_register_65 | BOOL | Fault flag |
+| UR30 → Pi | output_int_register_12 | INT32 | Extrusion mode: 0=off, 1=extrude, 2=retract |
+| UR30 → Pi | output_double_register_12 | DOUBLE | Commanded extrusion rate (mm/s) |
+| UR30 → Pi | output_double_register_13 | DOUBLE | TCP speed magnitude (mm/s) |
+| Pi → UR30 | input_int_register_18 | INT32 | Status: 0=idle, 1=running, 2=error, 3=homing |
+| Pi → UR30 | input_int_register_19 | INT32 | Error code: 0=none, 1=comms_lost, 2=stall, 3=thermal |
+| Pi → UR30 | input_double_register_18 | DOUBLE | Actual extrusion rate (mm/s) |
+| Pi → UR30 | input_double_register_19 | DOUBLE | StallGuard load (0–255, lower = higher load) |
+
+`ur_rtde` (SDU) Python bindings restrict int/double register indices to `[12,19]` outbound and `[18,22]` inbound; bit registers are not exposed on either side. The bridge therefore reads mode/rate/TCP from integer+double registers and no longer consumes the enable/estop/home bit registers (motion is gated on `mode != 0` plus the 500 ms watchdog and the pendant E-stop).
 
 ### Table 5: Test Results Summary
 
 | Test | Target | Measured | Status |
 |------|--------|----------|--------|
-| End-to-end latency (typical) | 5–10 ms | [TBD on hardware] | [Deferred to Phase 4] |
-| End-to-end latency (worst case) | < 20 ms | [TBD on hardware] | [Deferred to Phase 4] |
-| Speed accuracy (steady-state) | < 5 % | [TBD] | [Deferred to Phase 4] |
-| Watchdog response | ≤ 500 ms | [TBD] | [Deferred to Phase 4] |
-| Fault injection — RTDE disconnect | Safe state ≤ 500 ms | [TBD] | [Deferred to Phase 4] |
+| End-to-end command → motion | Shaft rotates at commanded rate | Confirmed 4 mm/s ramp-hold-ramp 2026-04-22 | **Pass** (qualitative) |
+| End-to-end latency (typical) | 5–10 ms | [TBD on hardware] | [Deferred — CSV capture run] |
+| End-to-end latency (worst case) | < 20 ms | [TBD on hardware] | [Deferred — CSV capture run] |
+| Speed accuracy (steady-state) | < 5 % | [TBD] | [Deferred — gravimetric run] |
+| Watchdog response | ≤ 500 ms | [TBD] | [Deferred — fault-injection run] |
+| Fault injection — RTDE disconnect | Safe state ≤ 500 ms | [TBD] | [Deferred — fault-injection run] |
 | StallGuard HITL (TP-06) | Stall event reaches URScript ≤ 100 ms | [TBD] | [Stretch goal] |
 
 At report submission, the provided hardware (motor, pump, paste) has not yet been received; quantitative test results will be updated once hardware is in hand and Phase 4 testing is complete.

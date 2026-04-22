@@ -80,10 +80,11 @@ Each scored against criteria weighted by update rate, latency, ecosystem, develo
 UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mbps──▶ SKR Pico ──STEP/DIR──▶ TMC2209 ──▶ Stepper ──▶ Pump
 ```
 
-- **UR30:** URScript on teach pendant writes 6 RTDE output registers
+- **UR30:** URScript on teach pendant writes RTDE output registers (int 12, doubles 12/13)
 - **Pi:** Python bridge daemon (125 Hz) + Klipper host (100 ms lookahead) + Unix socket to klippy
 - **SKR Pico (RP2040):** Klipper MCU firmware, 4x TMC2209 soldered, USB-C + 24 V in
-- **Feedback:** 5 RTDE input registers (status, error code, actual rate, ready, fault)
+- **Feedback:** RTDE input registers (status, error code, actual rate, StallGuard load)
+- **Lab network:** unmanaged gigabit switch (L2 only, no DHCP / no router); static IPs; UR30 inbound whitelist at `.4/32` forces Pi to `192.168.0.4`
 - **Pi400:** optional HMI / SSH / Mainsail — not in the real-time loop
 
 <!-- FIG 1 -->
@@ -190,16 +191,24 @@ UR30 ──RTDE/TCP 500 Hz──▶ Pi (bridge daemon + Klipper) ──USB 12 Mb
 
 # Measured Performance (Phase 4)
 
-<!-- FIG 8: Latency Model vs Measured — left half of slide -->
-<!-- FIG 10: Extrusion Accuracy Plot — right half of slide -->
+**First end-to-end motor spin achieved 2026-04-22** — URScript drives the pump shaft through the full chain.
 
-- **Figure 8 (left):** predicted vs measured latency per signal-path segment — bar chart from `scripts/report_figures.py --csv <bringup.csv>`
-- **Figure 10 (right):** commanded vs measured extrusion rate over a 30 s run at 5 / 10 / 25 / 50 mm/s — with ±2 % spec band shaded
-- Key numbers to recite:
-  - End-to-end latency: p50 = **[TBD from Wed data]**, p99 = **[TBD]** (target < 20 ms)
-  - Steady-state accuracy: mean |err| = **[TBD]** %, p95 = **[TBD]** % (target < 5 %)
+RTDE register trace captured live during the spin (bridge at `192.168.0.4` polling UR30 at `192.168.0.3`):
 
-<!-- NOTES: Placeholder slide — the two PNGs from scripts/report_figures.py drop in here after Wednesday's bringup. Target layout is two figures side-by-side, bullets summarizing below. If latency misses spec, own it; Phase 4 is about learning what the real system does, not ratifying the prediction. -->
+```
+t = 0.0 s   mode = 0   rate = 0.000 mm/s    (idle)
+t = 1.2 s   mode = 1   rate = 0.200 mm/s    ┐
+t = 2.1 s   mode = 1   rate = 2.000 mm/s    │ ramp 0 → 4 mm/s over 2 s
+t = 3.1 s   mode = 1   rate = 4.000 mm/s    ┘
+            (hold 5 s at 4 mm/s — motor rotating visibly)
+t = 8.2 s   mode = 0   rate = 0.000 mm/s    (disengaged, clean return)
+```
+
+Klipper's `print_time` advanced ~45 s of MANUAL_STEPPER moves; `buffer_time` peaked at 9.7 s then drained cleanly. No bridge errors.
+
+- **Quantitative latency + accuracy capture deferred** to a follow-on CSV run; the Figure 8 / 10 bar charts and scatter are blocked on that data.
+
+<!-- NOTES: This is the milestone slide. Land the RTDE trace numbers — the audience sees the bridge saw the commanded rate ramp, the motor moved, the system completed cleanly. The quantitative latency/accuracy plots are deferred to a clean CSV capture run; that's honest Phase 4 status, not a hole. -->
 
 ---
 
@@ -303,6 +312,11 @@ The state machine in `bridge_daemon.py` drives all off-nominal behavior to a sin
 
 **Design principle:** the stepper is off by default — every non-idle state is an explicit positive command. A lost connection cannot leave the motor running.
 
+**Real-world gotchas actually hit during 2026-04-22 bring-up** (now documented):
+
+- **UR30 inbound-access whitelist** → Pi must use the allow-listed IP (`.4/32`); ICMP passes through but TCP to 29999/30001–30004 silently drops from other IPs.
+- **URScript top-level assignments** → Secondary Interface (port 30002) silently rejects scripts with bare `X = 5` lines outside a `def`. Fix: put everything inside a function and call it at the end.
+
 <!-- NOTES: This is the "defense in depth" backup slide. Q&A magnet for "what if X fails" questions. Each row has a concrete handler — pointable to a file:line in the codebase. If pressed, cite docs/design/hitl_plan.md for the full fault matrix. -->
 
 ---
@@ -310,15 +324,14 @@ The state machine in `bridge_daemon.py` drives all off-nominal behavior to a sin
 # Backup: RTDE Register Map
 
 **UR30 → Pi (output)**
-- `output_int_register_0` — extrusion mode (0/1/2)
-- `output_double_register_0` — commanded rate (mm/s)
-- `output_double_register_1` — TCP speed (mm/s)
-- `output_bit_register_64/65/66` — enable / e-stop / home
+- `output_int_register_12` — extrusion mode (0/1/2)
+- `output_double_register_12` — commanded rate (mm/s)
+- `output_double_register_13` — TCP speed (mm/s)
 
 **Pi → UR30 (input)**
-- `input_int_register_0` — status (0 idle / 1 running / 2 error / 3 homing)
-- `input_int_register_1` — error code (0/1/2/3)
-- `input_double_register_0` — actual rate (mm/s)
-- `input_bit_register_64/65` — ready / fault
+- `input_int_register_18` — status (0 idle / 1 running / 2 error / 3 homing)
+- `input_int_register_19` — error code (0/1/2/3)
+- `input_double_register_18` — actual rate (mm/s)
+- `input_double_register_19` — StallGuard load (0–255, lower = higher load)
 
-Reserved: StallGuard load, driver temperature, position target
+`ur-rtde` restricts int/double indices to `[12,19]` outbound and `[18,22]` inbound; bit registers are not exposed through the Python bindings, so motion is gated on `mode != 0` (plus watchdog + pendant E-stop) rather than an enable bit.

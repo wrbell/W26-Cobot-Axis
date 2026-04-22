@@ -7,6 +7,70 @@ by meaningful bringup checkpoints rather than strict semver — this is a Bolton
 
 ## [Unreleased]
 
+## [2026-04-22c] — Post-bringup consolidation: docs + report + URScript alignment
+
+Follow-on sweep after today's first-spin milestone — bakes the field lessons
+into the repo so the next lab session starts one step ahead.
+
+### Added
+
+- `docs/pi_operator_guide.md` — terminal-at-the-console troubleshooting
+  cheat sheet (monitor + USB keyboard, no SSH). Covers the seven paths that
+  mattered tonight: first contact, services-up one-liner, klipper health,
+  ur-rtde handshake, bridge log tail, manual Moonraker motor spin, and a
+  symptom → cause → fix table.
+- `docs/end_to_end_test_guide.md` — end-to-end motor-spin playbook. Includes
+  the preflight checklist (every item is something that actually bit us),
+  two run paths (pendant USB-stick `.urp` vs Secondary-Interface push from
+  the Pi), expected success signatures, an operational-mode matrix
+  (Local/Remote × Manual/Automatic × 3PE), and a full troubleshooting
+  matrix.
+- `reports/turn-in/report/figures/fig3_network_topology.mmd` (+ `.png`) —
+  lab network diagram: unmanaged switch, static IPs, UR30 inbound
+  whitelist, no DHCP / no router. Referenced in F.1.
+
+### Changed
+
+- **Breaking**: `src/urscript/extrusion_control.script` register indices
+  shifted to match the PR #29 bridge layout
+  (`output_int_register_12`, `output_double_register_12/13`,
+  `input_int_register_18/19`, `input_double_register_18/19`). Dropped all
+  `write_/read_*_boolean_register()` calls since the `ur_rtde` Python
+  bindings don't expose bit registers — motion is now gated on
+  `mode != 0` instead of an explicit enable bit, and fault detection
+  reads `input_int_register_18` (status) and `input_int_register_19`
+  (error code).
+- `reports/turn-in/report/report.md`:
+  - F.1 gains a short paragraph on the lab network topology (referencing
+    Fig 3).
+  - G.2 notes the first end-to-end motor spin was achieved 2026-04-22;
+    quantitative latency and accuracy remain in the deferred bucket
+    pending a CSV capture run.
+  - Table 4 (Register Allocation summary) rewritten to the post-PR #29
+    indices with a note on the `ur-rtde` range restriction.
+  - Table 5 first row reports the qualitative "Pass" for end-to-end
+    command → motion; remaining rows explicitly tied to follow-on
+    capture runs rather than a generic `[Deferred to Phase 4]` tag.
+  - Body word count is 2000/2000 after the edits (at budget, no slack).
+- `reports/turn-in/presentation/presentation.md`:
+  - Slide 7 (Selected Architecture) gains a lab-network bullet.
+  - Slide 14 (Measured Performance) flips from placeholder to the
+    RTDE register trace actually captured during the spin; still flags
+    quantitative Figure 8 / 10 as deferred.
+  - Slide 21 (Failure Modes) lists the two real gotchas we hit today
+    (firewall whitelist, URScript top-level-assignment drop).
+  - Slide 22 (Register Map) updated to the post-PR #29 indices.
+
+### Notes
+
+- `test_basic.script`, `test_calibration.script`, and `slicer_mblack06mm.script`
+  still hold the old register indices (0/1/64-66). Tracked in `todo.md`;
+  out of scope for this PR so the primary demo script fix lands clean.
+- Dashboard `SetOperationalMode manual|automatic` integration in
+  `dashboard_client.py` is future work — the UR30 ISO safety model
+  forbids flipping Local↔Remote from an external client anyway, so the
+  demo path is "set Remote Control at the pendant, leave it."
+
 ## [2026-04-22b] — First end-to-end UR-driven motor spin
 
 **Milestone: pump motor visibly rotating under UR30 command.** Every link
