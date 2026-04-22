@@ -1,0 +1,86 @@
+# W26 Cobot Axis — Motor-Only Bringup Test (test_motor_only.script)
+# Runs on: UR30 teach pendant / controller
+# Purpose: Exercise the full command path (URScript -> RTDE -> Pi bridge ->
+#          Klipper -> TMC2209 -> pump stepper) WITHOUT moving the robot arm.
+#          Use this to verify motor control on the bench before integrating
+#          arm motion.
+#
+# Prerequisites:
+#   - UR30 on 192.168.0.3, controller initialized (RUNNING / NORMAL)
+#   - Pi on 192.168.0.4 (only .4 is whitelisted in UR30 inbound firewall)
+#   - w26-bridge.service active on the Pi (RTDE + klippy both connected)
+#   - SKR Pico flashed with Klipper; klipper.service shows MCU configured
+#   - SKR Pico 24V VIN connected (TMC2209 needs motor voltage to respond)
+#
+# Register mapping (see docs/register_allocation.md):
+#   output_int_register_0    = extrusion mode (0=off, 1=extrude, 2=retract)
+#   output_double_register_0 = commanded extrusion rate (mm/s)
+#   output_double_register_1 = TCP speed magnitude (mm/s) — held at 0.0
+#   output_bit_register_64   = extrusion enable
+#   output_bit_register_65   = emergency stop (active-high halt)
+#
+# Safety notes:
+#   - This script does NOT call movel / movej / speedl / speedj. The robot
+#     arm must not move at any point while this script runs.
+#   - If the stepper motor does anything unexpected (stall, reversal,
+#     thermal shutdown, screaming noise), hit the pendant E-stop. The bridge
+#     watchdog will also halt the stepper within 500 ms of losing RTDE.
+#   - Keep the speed slider above 0% on the teach pendant — the controller
+#     refuses to execute even non-motion programs if the slider is at 0.
+
+TEST_RATE_MM_S = 2.0    # modest rate for first spin — adjust up after success
+RAMP_STEPS     = 20     # steps to ramp 0 -> TEST_RATE_MM_S
+RAMP_DT        = 0.1    # seconds between ramp steps (so ramp = 2.0 s)
+HOLD_SECS      = 5.0    # seconds to hold at TEST_RATE_MM_S
+
+def clear_command_registers():
+    # Clean baseline: stepper off, rate 0, no e-stop asserted, arm speed 0.
+    write_output_boolean_register(65, False)  # e-stop off
+    write_output_boolean_register(64, False)  # enable off
+    write_output_integer_register(0, 0)       # mode = off
+    write_output_float_register(0, 0.0)       # extrusion rate 0
+    write_output_float_register(1, 0.0)       # TCP speed magnitude 0 (arm idle)
+end
+
+def motor_only_test():
+    popup("Motor-only test starting. Arm will NOT move.", title="W26", blocking=False)
+
+    clear_command_registers()
+    sleep(0.5)  # let the bridge observe a clean baseline
+
+    # Engage: mode=extrude, enable on, rate still 0. Motor should be
+    # energized (holding torque) but not turning yet.
+    write_output_integer_register(0, 1)       # mode = extrude
+    write_output_boolean_register(64, True)   # enable
+    sleep(0.5)
+
+    # Ramp 0 -> TEST_RATE_MM_S over RAMP_STEPS * RAMP_DT seconds.
+    local i = 1
+    while i <= RAMP_STEPS:
+        local rate = TEST_RATE_MM_S * (i / RAMP_STEPS)
+        write_output_float_register(0, rate)
+        sleep(RAMP_DT)
+        i = i + 1
+    end
+
+    # Hold at target rate.
+    write_output_float_register(0, TEST_RATE_MM_S)
+    sleep(HOLD_SECS)
+
+    # Ramp back to 0.
+    i = RAMP_STEPS
+    while i >= 0:
+        local rate = TEST_RATE_MM_S * (i / RAMP_STEPS)
+        write_output_float_register(0, rate)
+        sleep(RAMP_DT)
+        i = i - 1
+    end
+
+    # Disengage cleanly.
+    clear_command_registers()
+    sleep(0.5)
+
+    popup("Motor-only test complete.", title="W26", blocking=False)
+end
+
+motor_only_test()
