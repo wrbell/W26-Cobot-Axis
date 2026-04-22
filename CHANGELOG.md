@@ -7,6 +7,62 @@ by meaningful bringup checkpoints rather than strict semver — this is a Bolton
 
 ## [Unreleased]
 
+## [2026-04-22b] — First end-to-end UR-driven motor spin
+
+**Milestone: pump motor visibly rotating under UR30 command.** Every link
+in the system architecture chain (URScript → RTDE → Pi bridge → Klipper
+host → Klipper MCU on Pico → TMC2209 → stepper coils → shaft) is now
+proven on real hardware. This was the primary Phase 4 demonstration goal.
+
+### What landed
+
+- `test_motor_only.script` rewritten to the form that actually executes
+  via the UR30 Secondary Interface: all constants and logic inside the
+  `def`, no top-level variable assignments. Validated end-to-end —
+  motor spins for ~7 s under the URScript ramp/hold/ramp profile.
+- Dispatch path captured in evidence: live RTDE register monitor showed
+  `output_double_register_12` ramping `0 → 4.0 mm/s` (in 0.2 mm/s steps
+  every 100 ms), holding 5 s, then back to 0. In parallel, klipper's
+  `print_time` jumped from `47.888 → 93.345` (45 s of MANUAL_STEPPER
+  motion scheduled) and `buffer_time` filled to 9.7 s and drained to 0.
+
+### Hard-won lessons documented in script comments
+
+1. **Top-level URScript assignments are silently rejected over Secondary
+   Interface (port 30002).** A script with `X = 5` outside any `def`
+   appears to upload (TCP write succeeds, no error returned by the
+   controller) but never executes. Fix: put everything inside a `def`,
+   call the def at the end of the file. Burned ~30 min finding this —
+   the failure mode is "script silently does nothing."
+2. **URScript integer division truncates.** `i / 20` where both are int
+   returns `0` for `i < 20`. Use `i / 20.0` to force float math during
+   the ramp.
+3. **Klipper's manual_stepper move queue can stall** when too many tiny
+   moves accumulate from a long bridge run. A `FIRMWARE_RESTART` between
+   long test runs clears the queue and the "Printer is halted" state.
+4. **Stale Pi-side `printer.cfg` blocked klipper restart**: a leading
+   space on `[neopixel status_led]` from an earlier hot-edit caused
+   `Option 'pin' is not valid in section 'virtual_sdcard'` (klipper's
+   parser merged neopixel into virtual_sdcard). Fixed live by re-syncing
+   the repo's clean `printer.cfg` to the Pi.
+
+### Out of repo, on the Pi only
+
+- All bridge fixes from PR #29 already deployed via hot-sync earlier
+  today; the Pi's `git log` is behind main but the code matches.
+- `printer.cfg` on the Pi has the real MCU serial path
+  (`usb-Klipper_rp2040_504450593048501C-if00`) — repo intentionally
+  keeps `PLACEHOLDER` for fresh deploys.
+
+### Remaining Phase 4 work
+
+- Switch URScript transport from Secondary Interface ad-hoc push to a
+  pendant-loaded `.urp` for the demo.
+- Run `test_basic.script` (nine-point acceptance test) once it's
+  updated to the new register indices (out of scope for this PR).
+- Capture latency + accuracy measurements via `data_logger.py` for
+  the Phase 4 results section.
+
 ## [2026-04-22] — First end-to-end RTDE handshake
 
 **Milestone: first real data read from the physical UR30.** Lab bringup took
