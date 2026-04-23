@@ -66,10 +66,14 @@ The Pi400 is an **optional** HMI for SSH, web UI, and monitoring. The system run
 
 **Testing & validation:**
 
+- [docs/end_to_end_test_guide.md](docs/end_to_end_test_guide.md) — motor-spin playbook: preflight, two run paths (pendant `.urp` vs Secondary Interface push), operational-mode matrix, troubleshooting matrix
+- [docs/pi_operator_guide.md](docs/pi_operator_guide.md) — terminal-at-the-console troubleshooting when the lab network is down (monitor + USB keyboard on the Pi)
+- [docs/urcap_machinemotion_workaround.md](docs/urcap_machinemotion_workaround.md) — why pendant `.urp` Play errors with "cannot connect to MachineMotion" on the lab robot, and how to push URScript via Secondary Interface (port 30002) instead
 - [docs/design/testing_strategy.md](docs/design/testing_strategy.md) — unit / integration / HITL tier architecture
 - [docs/design/test_procedures.md](docs/design/test_procedures.md) — formal acceptance tests (TP-01 … TP-05)
 - [docs/design/hitl_plan.md](docs/design/hitl_plan.md) — StallGuard + URSim hardware-in-the-loop plan
 - [docs/ursim_quickstart.md](docs/ursim_quickstart.md) — URSim Docker runbook
+- [src/urscript/test_motor_only.script](src/urscript/test_motor_only.script) — motor-only bringup test (zero arm motion; proven on hardware 2026-04-22 and 2026-04-23)
 - [src/urscript/test_basic.script](src/urscript/test_basic.script) — on-robot validation (sub-tests A–I)
 - [src/urscript/test_calibration.script](src/urscript/test_calibration.script) — pump flow characterization
 
