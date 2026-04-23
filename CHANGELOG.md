@@ -7,6 +7,41 @@ by meaningful bringup checkpoints rather than strict semver — this is a Bolton
 
 ## [Unreleased]
 
+## [2026-04-23] — MachineMotion URCap hurdle + Secondary Interface workaround
+
+Second motor spin on the real hardware (5 mm/s hold for 8 s ≈ 1 full rev
+— everything in the stack reproduced cleanly from yesterday's first run).
+One new hurdle surfaced during the pendant-loaded `.urp` path: the lab
+robot's installed **Vention MachineLogic / MachineMotion URCap** blocks
+every `.urp` Play with "Check configuration — cannot connect to
+MachineMotion". URScript injected via the Secondary Interface (port
+30002) is not affected — it bypasses the Installation's URCap init.
+
+### Added
+
+- `docs/urcap_machinemotion_workaround.md` — explains the failure mode,
+  documents the Secondary-Interface push path as the working workaround
+  (including a Dashboard-stop sequence for clearing a stuck `PLAYING`
+  program), and covers the preconditions (Remote Control ON, no active
+  `.urp`, no top-level URScript assignments) we burned time on today.
+
+### Changed
+
+- `README.md` "Testing & validation" section now links
+  `docs/end_to_end_test_guide.md`, `docs/pi_operator_guide.md`, and the
+  new `urcap_machinemotion_workaround.md`. The first two were created in
+  yesterday's PR #31 but never wired into the README.
+
+### Notes
+
+- **Not fixed**, just worked around: the lab's UR30 Installation still
+  has MachineLogic enabled. Alternatives (new Installation without the
+  URCap; disable the URCap itself) are documented in the new doc but
+  require safety/admin passwords the team doesn't hold.
+- **Oral-defense demo plan**: push `test_motor_only.script` via Secondary
+  Interface from the Pi (`cat test_motor_only.script > /dev/tcp/.../30002`)
+  rather than pendant Play. Battle-tested twice on real hardware.
+
 ## [2026-04-22c] — Post-bringup consolidation: docs + report + URScript alignment
 
 Follow-on sweep after today's first-spin milestone — bakes the field lessons
