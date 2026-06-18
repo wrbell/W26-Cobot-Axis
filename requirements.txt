@@ -11,7 +11,7 @@
 # mode (no real robot connection) -- see src/bridge/rtde_client.py.
 
 # --- Runtime ---
-ur-rtde>=1.5.7,<2.0
+ur-rtde>=1.6.3,<2.0
 
 # --- Development / Testing (install with: pip install -r requirements.txt) ---
 pytest>=7.0
