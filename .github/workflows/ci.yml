@@ -21,7 +21,9 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install ruff pytest pytest-cov ur_rtde
+        # Same ruff revision as .pre-commit-config.yaml.
+        # An unpinned ruff fails on bridge code that already exists on main.
+        run: pip install 'ruff==0.9.7' pytest pytest-cov ur_rtde
 
       - name: Lint
         run: ruff check src/bridge/ --output-format=github
@@ -129,7 +131,9 @@ jobs:
 
       - name: Audit dependencies
         run: |
-          pip install pip-audit
+          # The runner image has setuptools 79.0.1 (PYSEC-2026-3447).
+          # That failure already exists on main. Install the fixed release, then audit.
+          pip install pip-audit 'setuptools>=83'
           pip-audit
 
   codespell:
