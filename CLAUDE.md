@@ -188,3 +188,13 @@ Rough drafts in `docs/phase2/` — content ready to paste into Word and redraw i
 ## Design Process
 
 Follows Bolton's Mechatronics 7-step design process: need → problem analysis → specification → possible solutions → solution selection → detailed design → working drawings. Iteration between steps is expected.
+
+<!-- standards:begin -->
+## Collection standards
+
+Every project under `/Users/willem/Code` follows the shared standards in `/Users/willem/Code/standards/` (index: `standards/STANDARDS.md`; future standards: `standards/ROADMAP.md`).
+
+- **Presentations:** build every deck from `standards/powerpoint template/Willem-Default.potx` (theme "Helena": Neue Haas Grotesk Text Pro, 16:9, teal/orange/red accent palette). Spec: `standards/powerpoint template/STANDARD.md`. Generate with `standards/powerpoint template/house_style.py` (open `Willem-Default-Base.pptx`, never the `.potx`) and gate with `standards/powerpoint template/deck_checks.py` before calling a deck done.
+- **Deck rules:** no speaker notes in submitted decks; editable shapes, not chart images; numbered, linked superscript citations with a final References slide; no bottom rules, citation strips, or page counters; footer text only when a course or client requires it (for example `ME460 HWx`), which overrides the default of no footer; export the deliverable PDF with native PowerPoint and use LibreOffice renders only for QA.
+- **Everything else:** do not invent facts, dates, or numbers; mark unknowns TBD and point at the source. Keep copyrighted course material out of git. This block is managed by `standards/tools/apply_standards.py`; edit `standards/ai-files/BLOCK-root.md`, not this copy.
+<!-- standards:end -->

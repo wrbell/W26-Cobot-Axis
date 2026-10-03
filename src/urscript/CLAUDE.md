@@ -40,3 +40,7 @@ No `pytest` target. Validation is manual:
 ## Where this fits in the report
 
 URScript is the "input side" of the closed-loop controller. Cited in Report Section F.2 (Software Architecture) and Section G.2 (testing — `test_basic.script` is the nine-point acceptance test). Presentation slide 9.
+
+<!-- standards:begin -->
+Collection standards (presentations, sources, git hygiene) live in `/Users/willem/Code/standards/STANDARDS.md`; decks are built from `standards/powerpoint template/` and gated with its `deck_checks.py`. Managed block: edit `standards/ai-files/BLOCK-nested.md`, not this copy.
+<!-- standards:end -->

@@ -55,3 +55,7 @@ Markdown is the source of truth — regenerate `.docx` / `.pptx` after every edi
 ## Canonical skeleton
 
 `docs/design/final_report_outline.md` — section structure, word budgets, figure list, table list, references, team-work split, timeline. Report and presentation both derive from this.
+
+<!-- standards:begin -->
+Collection standards (presentations, sources, git hygiene) live in `/Users/willem/Code/standards/STANDARDS.md`; decks are built from `standards/powerpoint template/` and gated with its `deck_checks.py`. Managed block: edit `standards/ai-files/BLOCK-nested.md`, not this copy.
+<!-- standards:end -->
