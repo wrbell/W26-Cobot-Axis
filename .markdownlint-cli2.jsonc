@@ -1,0 +1,9 @@
+{
+  // Vendored STE skill (and the Claude Code symlink to it).
+  // markdownlint-cli2 reads ignores from this file, not from .markdownlint.jsonc.
+  // Do not edit the upstream skill files to satisfy the linter.
+  "ignores": [
+    ".agents/**",
+    ".claude/skills/simplified-technical-english/**"
+  ]
+}
