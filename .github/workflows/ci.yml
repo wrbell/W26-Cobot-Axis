@@ -21,9 +21,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        # Use the same ruff revision as .pre-commit-config.yaml.
-        # A newer ruff reports findings in existing bridge code.
-        run: pip install 'ruff==0.9.7' pytest pytest-cov ur_rtde
+        run: pip install ruff pytest pytest-cov ur_rtde
 
       - name: Lint
         run: ruff check src/bridge/ --output-format=github
@@ -131,7 +129,7 @@ jobs:
 
       - name: Audit dependencies
         run: |
-          pip install pip-audit 'setuptools>=83'
+          pip install pip-audit
           pip-audit
 
   codespell:
