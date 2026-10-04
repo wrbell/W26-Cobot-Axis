@@ -14,8 +14,7 @@ TMC2209 drivers). The system must run standalone, without the optional Pi400
 HMI. `docs/agents/project-reference.md` holds the architecture, the hardware,
 the repository layout, and the file index.
 
-Main languages: Python (`src/bridge/`), C (`src/klipper_mods/`), URScript
-(`src/urscript/`), and shell (`deploy.sh`, `scripts/`).
+Main languages: Python, C (Klipper overlay), URScript, and shell.
 
 Read `todo.md` before you start work. It is the master task tracker: the
 Bolton 7-step progress, the phase deliverables, the software tasks (written,
@@ -71,6 +70,7 @@ Follow the config files. Do not paste a style guide into this file.
 - Markdown: `.markdownlint.jsonc` (permissive on purpose; read its header)
 - YAML: `.yamllint` for the workflows; `enforcement/yamllint/.yamllint.yml`
 - Editor defaults: `.editorconfig`
+- Prose: use the skill in `.agents/skills/simplified-technical-english/`
 - Commit messages: `enforcement/commitlint/commitlint.config.js`
 - Secrets scan: `enforcement/gitleaks/.gitleaks.toml`
 
