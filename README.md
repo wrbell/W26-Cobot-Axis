@@ -1,13 +1,38 @@
+# W26 Cobot Axis — UR30 7th Axis for Metal Paste Dispensing
+
+A stepper-driven pump that acts as a 7th UR30 axis to dispense metal paste.
+
+Status (2026-10-04): the motor-only test ran on the real UR30 on 2026-04-22
+and 2026-04-23 (last bring-up entry in `CHANGELOG.md`). Submission of the
+final report and presentation: TBD (not recorded in this repo).
+
 ![CI](../../actions/workflows/ci.yml/badge.svg)
 ![Firmware Build](../../actions/workflows/firmware.yml/badge.svg)
 ![Patch Freshness](../../actions/workflows/patch-freshness.yml/badge.svg)
 [![codecov](https://codecov.io/gh/wrbell/W26-Cobot-Axis/graph/badge.svg)](https://codecov.io/gh/wrbell/W26-Cobot-Axis)
 
-# W26 Cobot Axis — UR30 7th Axis for Metal Paste Dispensing
-
 **Course:** ME 472 — Mechatronics, Winter 2026, University of Michigan
 **Team:** Willem (Software/EE), Dawood (Mechanical)
 **Instructor:** Prof. Pannier
+
+Agent file: [AGENTS.md](AGENTS.md) holds the rules for AI coding agents.
+
+## Contents
+
+- [Overview](#overview)
+- [System Architecture](#system-architecture)
+- [Hardware](#hardware)
+- [Software Stack](#software-stack)
+- [Documentation](#documentation)
+- [Current Progress (as of Feb 24, 2026 — Week 8)](#current-progress-as-of-feb-24-2026--week-8)
+- [Project Schedule](#project-schedule)
+- [Bolton's 7-Step Design Process](#boltons-7-step-design-process)
+- [Repository Structure](#repository-structure)
+- [Key Documents](#key-documents)
+- [Team](#team)
+- [Recreate](#recreate)
+- [Deliverables](#deliverables)
+- [License](#license)
 
 ## Overview
 
@@ -230,7 +255,8 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 ## Repository Structure
 
 ```
-├── CLAUDE.md                      # AI assistant context (Claude Code)
+├── AGENTS.md                      # Rules for AI coding agents (canonical)
+├── CLAUDE.md                      # Claude Code pointer: imports AGENTS.md
 ├── README.md                      # This file
 ├── schedule.md                    # Accelerated project schedule
 ├── todo.md                        # Master task tracker
@@ -414,3 +440,36 @@ See [`schedule.md`](schedule.md) for the full weekly timeline.
 |--------|------|-------------|
 | Willem | Software / EE | RTDE comms, Klipper integration, firmware, electrical documentation |
 | Dawood | Mechanical | Packaging, cabling, end effector mounting, 3D-printed components, procurement |
+
+## Recreate
+
+| Command | What it does | Limit |
+| --- | --- | --- |
+| `make check` | Runs ruff, pytest with the 90 % coverage gate, mypy, yamllint and codespell | Covers `src/bridge/` only |
+| `make firmware` | Builds Klipper with the StallGuard overlay into `vendor/klipper/out/klipper.uf2` | Needs `arm-none-eabi-gcc` and a local `vendor/klipper` clone |
+| `python reports/turn-in/report/build_report.py` | Rebuilds `report.docx` from `report.md` and prints the word count per section | The PDF export (Word, Save As PDF) is manual |
+| `python reports/turn-in/presentation/build_presentation.py` | Rebuilds `presentation.pptx` from `presentation.md` | TBD |
+| `bash deploy.sh` | Installs and starts the stack on the headless Pi | Runs on the Pi only (`SETUP.md`) |
+
+## Deliverables
+
+The SHA-256 values are for the files as committed on 2026-04-22 (`838d235`).
+The working copy of `report.docx` has uncommitted changes, so its hash
+differs. Compute a hash with `shasum -a 256 FILE`.
+
+| File | SHA-256 | Submitted |
+| --- | --- | --- |
+| `reports/turn-in/report/report.docx` | `80a7bca69e6350792064f4395755dc022a277328a46e9e25b805827b847fb82e` | TBD |
+| `reports/turn-in/presentation/presentation.pptx` | `2e1ec6724cfb7a507f260a847bcea145c883c0316bd342c3d56ef68dd7c33722` | TBD |
+| Final report PDF (not in the repo) | TBD | TBD |
+
+Course dates, moved here from `reports/CLAUDE.md` on 2026-10-04: final report
+due Thu Apr 23, 2026, 6:00 PM; oral presentation 6:30–9:30 PM on the date
+recorded there as "Thu Apr 24, 2026". 2026-04-24 is a Friday, so the weekday
+or the date is wrong: TBD (Willem confirms).
+
+## License
+
+No license file is in this repository.
+
+`SPDX-License-Identifier: TBD (Willem decides)`

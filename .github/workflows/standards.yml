@@ -1,0 +1,252 @@
+---
+# Managed by standards/tools/adopt_standards.py.
+# Re-run the tool to add or remove a domain; do not edit by hand.
+# Jobs copied from wrbell/standards/.github/workflows/ at 0fe6a29de0f22af075ba51fafff9e03d1238d54d.
+name: Standards
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+jobs:
+  # From docs-structure.yml.
+  docs-lint:
+    name: docs-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Check docs structure
+        if: "${{ hashFiles('tools/check_docs.py') != '' }}"
+        run: python3 tools/check_docs.py
+      - name: Lint README headings
+        if: "${{ hashFiles('templates/README.template.md') != '' }}"
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
+        with:
+          config: enforcement/docs/readme.markdownlint-cli2.jsonc
+          globs: |
+            templates/README.template.md
+      - name: Lint decision record headings
+        if: "${{ hashFiles('docs/decisions/*.md') != '' }}"
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
+        with:
+          config: enforcement/docs/adr.markdownlint-cli2.jsonc
+          globs: |
+            docs/decisions/*.md
+  # From agentic-coding.yml.
+  agents-md-lint:
+    name: agents-md-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      # hashFiles is empty before checkout, so the gate is on this step.
+      - name: Check agent instruction files
+        if: >-
+          ${{ hashFiles('AGENTS.md', 'templates/AGENTS.md', 'CLAUDE.md',
+          'templates/CLAUDE.md', '.cursor/rules/**',
+          'templates/.cursor/rules/**') != '' }}
+        run: |
+          set -euo pipefail
+          if [ ! -f tools/agents_md_lint.py ]; then
+            echo "tools/agents_md_lint.py is missing. Copy it from wrbell/standards."
+            exit 1
+          fi
+          python3 tools/agents_md_lint.py
+      - name: Lint AGENTS.md
+        if: >-
+          ${{ hashFiles('enforcement/markdownlint/.markdownlint-cli2.yaml') != ''
+          && hashFiles('**/AGENTS.md') != '' }}
+        uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff  # v24.2.0
+        with:
+          config: enforcement/markdownlint/.markdownlint-cli2.yaml
+          globs: "**/AGENTS.md"
+  # From git-commits-versioning.yml.
+  commitlint:
+    name: commitlint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Set up Node
+        if: >-
+          ${{ hashFiles('enforcement/commitlint/commitlint.config.js',
+          'commitlint.config.js') != '' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: "22"
+      - name: Install commitlint
+        if: >-
+          ${{ hashFiles('enforcement/commitlint/commitlint.config.js',
+          'commitlint.config.js') != '' }}
+        run: |
+          set -eu
+          if [ -f enforcement/commitlint/package.json ]; then
+            npm install --prefix enforcement/commitlint --no-fund --no-audit
+          else
+            npm install --prefix /tmp/commitlint-tools --no-fund --no-audit \
+              @commitlint/cli@21.2.3 @commitlint/config-conventional@21.2.3
+          fi
+      - name: Lint commit messages
+        if: >-
+          ${{ hashFiles('enforcement/commitlint/commitlint.config.js',
+          'commitlint.config.js') != '' }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          GIT_REF: ${{ github.ref }}
+          PUSH_BEFORE: ${{ github.event.before || '' }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          if [ -x enforcement/commitlint/node_modules/.bin/commitlint ]; then
+            bin=enforcement/commitlint/node_modules/.bin/commitlint
+            export NODE_PATH="$PWD/enforcement/commitlint/node_modules"
+            config=enforcement/commitlint/commitlint.config.js
+          else
+            bin=/tmp/commitlint-tools/node_modules/.bin/commitlint
+            export NODE_PATH=/tmp/commitlint-tools/node_modules
+            config=commitlint.config.js
+          fi
+          pass=tests/fixtures/git-commits-versioning/commit-pass.txt
+          fail=tests/fixtures/git-commits-versioning/commit-fail.txt
+          if [ -f "$pass" ]; then
+            "$bin" --config "$config" --verbose < "$pass"
+            if "$bin" --config "$config" --verbose < "$fail"; then
+              echo "The failing commit sample passed." >&2
+              exit 1
+            fi
+          fi
+          # Squash-merge writes the pull request title onto main.
+          # The blocking check is that title, in code-review.yml.
+          # Lint only new commits on a push to main.
+          # Do not lint feature-branch commits. Force-push is banned.
+          # 08d0df8..8860e41 is already on main and is not conventional.
+          from_sha=
+          to_sha=
+          if [ "${EVENT_NAME}" = "push" ] && \
+            [ "${GIT_REF}" = "refs/heads/main" ] && \
+            [ -n "${PUSH_BEFORE}" ] && \
+            [ "${PUSH_BEFORE}" != "0000000000000000000000000000000000000000" ]
+          then
+            from_sha=${PUSH_BEFORE}
+            to_sha=${PUSH_SHA}
+          fi
+          if [ -n "${from_sha}" ]; then
+            "$bin" --config "$config" --from "${from_sha}" --to "${to_sha}" \
+              --verbose
+          else
+            echo "No new commits on main. Skip the live commit check."
+          fi
+  branch-name:
+    name: branch-name
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Check the branch name
+        if: ${{ hashFiles('enforcement/commitlint/check_branch_name.sh') != '' }}
+        env:
+          BRANCH_NAME: ${{ github.event.pull_request.head.ref || '' }}
+        run: |
+          set -eu
+          script=enforcement/commitlint/check_branch_name.sh
+          pass=tests/fixtures/git-commits-versioning/branch-pass.txt
+          fail=tests/fixtures/git-commits-versioning/branch-fail.txt
+          if [ -f "$pass" ]; then
+            while IFS= read -r sample || [ -n "$sample" ]; do
+              [ -z "$sample" ] && continue
+              "$script" "$sample"
+            done < "$pass"
+            while IFS= read -r sample || [ -n "$sample" ]; do
+              [ -z "$sample" ] && continue
+              if "$script" "$sample"; then
+                echo "The failing branch sample passed." >&2
+                exit 1
+              fi
+            done < "$fail"
+          fi
+          for name in \
+            ai/task \
+            claude/task \
+            codex/task \
+            copilot/task \
+            cursor/fix-header-bug \
+            standards/review-git-api \
+            dependabot/pip/numpy-2.1.0
+          do
+            "$script" "$name"
+          done
+          if [ -n "${BRANCH_NAME}" ]; then
+            "$script" "$BRANCH_NAME"
+          else
+            echo "No pull request branch. Skip the live branch check."
+          fi
+  # From security-supply-chain.yml.
+  actions-lint:
+    name: actions-lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Check action pins and permissions
+        if: "${{ hashFiles('enforcement/gitleaks/check_workflows.py') != '' }}"
+        run: |
+          python3 enforcement/gitleaks/check_workflows.py \
+            .github/workflows \
+            templates/.github/workflows
+      - name: Check Dependabot config
+        if: "${{ hashFiles('enforcement/dependabot/check_dependabot.py') != '' }}"
+        run: python3 enforcement/dependabot/check_dependabot.py
+      - name: Install actionlint
+        if: "${{ hashFiles('.github/workflows/*.yml', '.github/workflows/*.yaml') != '' }}"
+        run: |
+          set -euo pipefail
+          curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+            -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          sudo install -m 755 /tmp/actionlint /usr/local/bin/actionlint
+      - name: Run actionlint
+        if: "${{ hashFiles('.github/workflows/*.yml', '.github/workflows/*.yaml') != '' }}"
+        run: actionlint -color
+  secrets-scan:
+    name: secrets-scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        if: "${{ hashFiles('enforcement/gitleaks/.gitleaks.toml', '**/.gitleaks.toml') != '' }}"
+        run: |
+          set -euo pipefail
+          version="8.30.1"
+          file="gitleaks_${version}_linux_x64.tar.gz"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${file}"
+          curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL \
+            -o "/tmp/${file}" "$url"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/${file}" | sha256sum -c
+          tar -xzf "/tmp/${file}" -C /tmp gitleaks
+          sudo install -m 755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+      - name: Run gitleaks
+        if: "${{ hashFiles('enforcement/gitleaks/.gitleaks.toml', '**/.gitleaks.toml') != '' }}"
+        run: |
+          set -euo pipefail
+          if [ -f .gitleaks.toml ]; then
+            config=".gitleaks.toml"
+          elif [ -f enforcement/gitleaks/.gitleaks.toml ]; then
+            config="enforcement/gitleaks/.gitleaks.toml"
+          else
+            echo "No .gitleaks.toml found."
+            exit 1
+          fi
+          gitleaks detect --source . --config "$config" --redact --verbose
+      - name: Check gitleaks allow comments
+        if: "${{ hashFiles('enforcement/gitleaks/check_allow_comments.py') != '' }}"
+        run: python3 enforcement/gitleaks/check_allow_comments.py

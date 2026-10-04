@@ -24,3 +24,44 @@ repos:
     hooks:
       - id: codespell
         args: ["--skip=vendor,*.json,.git,.coverage,*.xml", -L, ot]
+
+  # Added by standards/tools/adopt_standards.py.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: check-yaml
+      - id: check-added-large-files
+        args:
+          - --maxkb=10240
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: check-docs
+        name: check docs structure
+        entry: python3 tools/check_docs.py
+        language: system
+        pass_filenames: false
+        files: '^(README\.md|docs/decisions/.+\.md|templates/README\.template\.md)$'
+      - id: agents-md-lint
+        name: 'Check AGENTS.md, CLAUDE.md, and Cursor rules'
+        entry: python3 tools/agents_md_lint.py
+        language: system
+        pass_filenames: false
+        always_run: true
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.27.0
+    hooks:
+      - id: commitlint
+        stages:
+          - commit-msg
+        additional_dependencies:
+          - '@commitlint/config-conventional@21.2.3'
+        args:
+          - --config
+          - enforcement/commitlint/commitlint.config.js
