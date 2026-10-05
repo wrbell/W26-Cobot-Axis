@@ -32,3 +32,14 @@ These are infra — cite only in internal memos or the supplementary README, not
 - `stepper_driving.md` is the canonical stepper subsystem reference (~550 lines). If it disagrees with `src/klipper/printer.cfg`, `printer.cfg` wins — update this doc.
 - `integration_plan.md` defines the 8 integration stages referenced from the Phase 3 memo (`docs/phase3/progress_memo_draft.md` Table 1). Keep stage IDs stable.
 - `hitl_plan.md` defines `TP-06` (StallGuard HITL), referenced from Report Section G.2.
+
+<!-- standards:begin -->
+Collection standards (presentations, sources, git hygiene) live in
+`/Users/willem/Code/standards/STANDARDS.md`; decks are built from
+`standards/powerpoint template/` and gated with its `deck_checks.py`. Managed
+block: edit `standards/ai-files/BLOCK-nested.md`, not this copy.
+AI use in school work: no AI images, adviser pre-clearance for AI-written
+text, never edit graded text; see
+`standards/standards/ai-use-disclosure/ai-use-disclosure.md`.
+AI files: one `AGENTS.md` per repo; `CLAUDE.md` is `@AGENTS.md`.
+<!-- standards:end -->

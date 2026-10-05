@@ -29,3 +29,45 @@ htmlcov/
 
 # Vendored dependencies (cloned locally, not tracked)
 vendor/
+
+# --- Collection template additions (standards/templates/gitignore, 2026-10-04)
+
+# Local data: raw data, databases and machine-local notes stay out of git.
+.local/
+data/raw/
+*.sqlite
+*.sqlite3
+
+# Secrets: .env stays out; the documented example file stays in.
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+
+# Copyrighted handouts (decision 4, 2026-10-04): course and vendor PDFs stay
+# local. List each one in the INDEX.md of its folder with a SHA-256
+# (reqs/INDEX.md, docs/provided/INDEX.md). This public repo tracks no PDF of
+# Willem's own today.
+*.pdf
+# Allowlist: re-include a PDF of Willem's own by exact path after the *.pdf
+# line, for example:
+# !reports/turn-in/report/<own-file>.pdf
+
+# Tool output
+.build/qa/
+.chart-data-*/
+.revisions/
+dist/
+out/*.html
+
+# Python and Jupyter (the rules above stay)
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS
+Thumbs.db

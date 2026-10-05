@@ -1,0 +1,5 @@
+# repo_hygiene.py allow list (<check> <glob>, relative to the repo root).
+# vendor/klipper is a third-party Klipper clone. It is git-ignored and is
+# never edited or committed (see AGENTS.md, Commands).
+* vendor/*
+* vendor/**

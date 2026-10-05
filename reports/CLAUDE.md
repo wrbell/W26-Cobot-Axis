@@ -1,6 +1,6 @@
 # reports — Capstone Report + Presentation Deliverables
 
-Final course deliverables. Final report due **Thu Apr 23, 2026 (6:00 PM)**; oral presentation **Thu Apr 24, 2026 (6:30–9:30 PM)**.
+Final course deliverables: the final report and the oral presentation. The due dates are in `README.md` (Deliverables), not here.
 
 ## Layout
 
@@ -55,3 +55,14 @@ Markdown is the source of truth — regenerate `.docx` / `.pptx` after every edi
 ## Canonical skeleton
 
 `docs/design/final_report_outline.md` — section structure, word budgets, figure list, table list, references, team-work split, timeline. Report and presentation both derive from this.
+
+<!-- standards:begin -->
+Collection standards (presentations, sources, git hygiene) live in
+`/Users/willem/Code/standards/STANDARDS.md`; decks are built from
+`standards/powerpoint template/` and gated with its `deck_checks.py`. Managed
+block: edit `standards/ai-files/BLOCK-nested.md`, not this copy.
+AI use in school work: no AI images, adviser pre-clearance for AI-written
+text, never edit graded text; see
+`standards/standards/ai-use-disclosure/ai-use-disclosure.md`.
+AI files: one `AGENTS.md` per repo; `CLAUDE.md` is `@AGENTS.md`.
+<!-- standards:end -->

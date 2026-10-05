@@ -7,6 +7,21 @@ by meaningful bringup checkpoints rather than strict semver — this is a Bolton
 
 ## [Unreleased]
 
+### Changed
+
+- 2026-10-04 collection standards rollout. `AGENTS.md` is now the canonical
+  agent file and `CLAUDE.md` imports it. The project facts and file index
+  from the old root `CLAUDE.md` moved to `docs/agents/project-reference.md`.
+  Dates and status lines left the AI files; `README.md` holds them.
+- Added the collection checks: `.github/workflows/standards.yml`, extra
+  pre-commit hooks, `.editorconfig`, `.gitattributes` and `.standards.json`.
+
+### Removed
+
+- Stopped tracking three PDFs (two ME 472 handouts and a Raspberry Pi SDK
+  manual). They stay local and are listed in `reqs/INDEX.md` and
+  `docs/provided/INDEX.md`. `.gitignore` now ignores `*.pdf`.
+
 ## [2026-04-23] — MachineMotion URCap hurdle + Secondary Interface workaround
 
 Second motor spin on the real hardware (5 mm/s hold for 8 s ≈ 1 full rev
