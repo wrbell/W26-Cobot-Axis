@@ -16,6 +16,6 @@ ur-rtde>=1.6.3,<2.0
 # --- Development / Testing (install with: pip install -r requirements.txt) ---
 pytest>=7.0
 pytest-cov>=7.1.0
-mypy>=1.0
+mypy>=2.4.0
 ruff>=0.15.11
 pre-commit>=3.0
